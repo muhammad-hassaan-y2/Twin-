@@ -54,6 +54,14 @@ class AmbiguousResult(RuntimeError):
     """Raised by transports when the provider's answer cannot be trusted."""
 
 
+class MoneyNotMoved(RuntimeError):
+    """Raised when the provider refused before any charge existed.
+
+    Distinct from ``AmbiguousResult`` on purpose: a rejected credential cannot
+    leave money in flight, so the record should be settled, not wondered about.
+    """
+
+
 def idempotency_key(action_id: str, attempt: int) -> str:
     digest = hashlib.sha256(f"{action_id}:{attempt}".encode()).hexdigest()
     return f"tt-{digest[:24]}"
@@ -74,7 +82,9 @@ class PaymentRecord:
     def __post_init__(self) -> None:
         if not self.idempotency_key:
             self.idempotency_key = idempotency_key(self.action_id, self.attempt)
-        self._log(self.state.value, "created")
+        # A record restored from the ledger arrives with its history and is not newly created.
+        if not self.history:
+            self._log(self.state.value, "created")
 
     def _log(self, state: str, note: str) -> None:
         self.history.append((time.time(), state, note))
@@ -89,6 +99,11 @@ class PaymentMachine:
 
     def open(self, action_id: str, amount_cents: int, recipient: str) -> PaymentRecord:
         record = PaymentRecord(action_id=action_id, amount_cents=amount_cents, recipient=recipient)
+        self._by_key[record.idempotency_key] = record
+        return record
+
+    def adopt(self, record: PaymentRecord) -> PaymentRecord:
+        """Index a record that already happened, so a restart does not forget it."""
         self._by_key[record.idempotency_key] = record
         return record
 
@@ -124,6 +139,8 @@ class PaymentMachine:
         record = self._move(record, PaymentState.SUBMITTED, f"key={record.idempotency_key}")
         try:
             result = transport.charge(record.idempotency_key, record.amount_cents, record.recipient)
+        except MoneyNotMoved as exc:
+            return self._move(record, PaymentState.FAILED, f"refused before any charge: {exc}")
         except AmbiguousResult as exc:
             return self._move(record, PaymentState.UNKNOWN, f"ambiguous: {exc}")
         except Exception as exc:  # transport blew up: we do not know anything

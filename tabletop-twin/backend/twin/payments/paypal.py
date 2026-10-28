@@ -11,11 +11,15 @@ Credentials come from the environment. Nothing here has a default secret.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+
+from twin.payments.machine import AmbiguousResult, MoneyNotMoved
 
 
 @dataclass(frozen=True)
@@ -25,8 +29,12 @@ class ProviderResult:
     raw: dict | None = None
 
 
-class TransportTimeout(Exception):
+class TransportTimeout(AmbiguousResult):
     """The request may or may not have landed. The caller must treat this as unknown."""
+
+
+class ProviderNotFound(MoneyNotMoved):
+    """The provider says it has no record of that attempt — a real answer to a lookup."""
 
 
 def to_amount(amount_cents: int) -> str:
@@ -50,9 +58,13 @@ class PayPalConfig:
     secret: str
     environment: str = "sandbox"
     timeout_sec: float = 8.0
+    test_server_url: str | None = None
+    """Point the same transport at a local gateway. Never read from the environment."""
 
     @property
     def base_url(self) -> str:
+        if self.test_server_url:
+            return self.test_server_url
         return (
             "https://api-m.sandbox.paypal.com"
             if self.environment == "sandbox"
@@ -109,11 +121,14 @@ class PayPalTransport:
 
     def lookup(self, idempotency_key: str) -> ProviderResult:
         """Ask what happened to a specific attempt instead of paying again."""
-        found = self._post(
-            "/v2/checkout/orders",
-            {"idempotency_id": idempotency_key},
-            extra_headers={"PayPal-Request-Id": idempotency_key},
-        )
+        try:
+            found = self._post(
+                "/v2/checkout/orders",
+                {"idempotency_id": idempotency_key},
+                extra_headers={"PayPal-Request-Id": f"{idempotency_key}:lookup"},
+            )
+        except ProviderNotFound as exc:
+            return ProviderResult(status="not_found", raw={"reason": str(exc)})
         orders = found.get("resources") or []
         if not orders:
             return ProviderResult(status="not_found", raw=found)
@@ -137,8 +152,6 @@ class PayPalTransport:
         return self._send(request)
 
     def _access_token(self) -> str:
-        import time
-
         if self._token and self._token[1] > time.time():
             return self._token[0]
         basic = base64.b64encode(f"{self.config.client_id}:{self.config.secret}".encode()).decode()
@@ -152,9 +165,11 @@ class PayPalTransport:
             },
         )
         payload = self._send(request)
-        import time as _t
-
-        self._token = (payload["access_token"], _t.time() + int(payload.get("expires_in", 300)) - 30)
+        token = payload.get("access_token")
+        if not token:
+            name = str((payload.get("detail") or {}).get("name", "no access token in the reply"))
+            raise MoneyNotMoved(f"the provider refused our credentials ({name})")
+        self._token = (token, time.time() + int(payload.get("expires_in", 300)) - 30)
         return self._token[0]
 
     def _send(self, request: urllib.request.Request) -> dict:
@@ -167,12 +182,20 @@ class PayPalTransport:
                 detail = json.loads(body)
             except Exception:
                 detail = {"raw": body[:400].decode(errors="replace")}
-            # A 5xx or a 422 on a request we already sent is not a "no".
+            # A 5xx or a 408 on a request we already sent is not a "no".
             if error.code >= 500 or error.code == 408:
                 raise TransportTimeout(f"HTTP {error.code}") from error
-            mapped = self._map(str(detail.get("status", "")))
-            return {"status": mapped if mapped != "unknown" else "INVALID", "detail": detail}
-        except (urllib.error.URLError, TimeoutError) as error:
+            # Everything else was refused before the provider did the work, so no
+            # money can be in flight. Say which rule refused it instead of inventing
+            # a status the provider never returned.
+            name = str(detail.get("name") or f"HTTP {error.code}")
+            if error.code == 404:
+                raise ProviderNotFound(f"the provider has no such resource ({name})") from error
+            raise MoneyNotMoved(f"the provider refused the call ({name})") from error
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException, OSError) as error:
+            # urllib only wraps faults raised while *sending*. A connection the provider
+            # closes after taking the request arrives as a bare http.client error, and
+            # that is exactly the case that must read as "unknown".
             raise TransportTimeout(str(error)) from error
 
 
