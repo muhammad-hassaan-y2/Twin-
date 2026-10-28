@@ -2,8 +2,10 @@
 
 Meta's Model API advertises drop-in compatibility with the OpenAI SDK, so one
 adapter covers Muse Spark, Claude, or any local server that speaks the same
-shape. There is no default base URL and no default key: without both, the
-planner degrades to the rule planner and says so.
+shape. Each endpoint is configured on its own and reported under its own name:
+a route that says ``muse:...`` was answered by Meta's Model API, never by
+whatever happened to be in the environment. There is no default base URL and no
+default key: without both, the planner degrades to the rule planner and says so.
 
 The guard that matters is `assert_numbers_are_given`. A model that invents a
 plausible dollar figure is worse than a model that says nothing, so narration
@@ -22,23 +24,64 @@ from dataclasses import dataclass
 from .rules import RulePlanner
 from .tools import REGISTRY, ToolCall, ToolError, parse_calls
 
+MUSE = "muse"
+GENERIC = "openai-compatible"
+
 
 @dataclass
 class ModelConfig:
     base_url: str
     api_key: str
     model: str
+    provider: str = GENERIC
     timeout_sec: float = 20.0
     max_output_tokens: int = 512
 
-    @classmethod
-    def from_env(cls) -> "ModelConfig | None":
-        base = os.environ.get("META_MODEL_BASE_URL") or os.environ.get("LLM_BASE_URL")
-        key = os.environ.get("META_MODEL_API_KEY") or os.environ.get("LLM_API_KEY")
-        model = os.environ.get("META_MODEL_NAME") or os.environ.get("LLM_MODEL")
-        if not base or not key or not model:
-            return None
-        return cls(base_url=base.rstrip("/"), api_key=key, model=model)
+    @property
+    def route(self) -> str:
+        return f"{self.provider}:{self.model}"
+
+    def reply(self, body: dict, opener=urllib.request.urlopen) -> dict:
+        request = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+        )
+        with opener(request, timeout=self.timeout_sec) as response:
+            return json.loads(response.read())
+
+
+def _from_names(base_vars: tuple[str, ...], key_vars: tuple[str, ...], model_vars: tuple[str, ...], provider: str) -> ModelConfig | None:
+    base = next((os.environ[v] for v in base_vars if os.environ.get(v)), "")
+    key = next((os.environ[v] for v in key_vars if os.environ.get(v)), "")
+    model = next((os.environ[v] for v in model_vars if os.environ.get(v)), "")
+    if not base or not key or not model:
+        return None
+    return ModelConfig(base_url=base.rstrip("/"), api_key=key, model=model, provider=provider)
+
+
+def providers_from_env() -> list[ModelConfig]:
+    """Every endpoint this machine is configured for, most preferred first.
+
+    Muse wins when both are present, and the fallback to rules is reached only
+    after the endpoints actually tried have failed — so a route is a report, not
+    a guess.
+    """
+    out = [
+        _from_names(("META_MODEL_BASE_URL",), ("META_MODEL_API_KEY",), ("META_MODEL_NAME",), MUSE),
+        _from_names(("LLM_BASE_URL", "OPENAI_COMPAT_BASE_URL"), ("LLM_API_KEY", "OPENAI_COMPAT_API_KEY"),
+                    ("LLM_MODEL", "OPENAI_COMPAT_MODEL"), GENERIC),
+    ]
+    return [config for config in out if config is not None]
+
+
+def providers_configured() -> list[str]:
+    """Names only. An endpoint is reported as configured without repeating its key."""
+    return [config.provider for config in providers_from_env()]
 
 
 class NumberFabrication(Exception):
@@ -57,10 +100,14 @@ class ModelPlanner:
         self.last_route = ""
         self.voice_prompt = ""
 
+    @property
+    def provider(self) -> str:
+        return self.config.provider
+
     @classmethod
     def from_env(cls) -> "ModelPlanner | None":
-        config = ModelConfig.from_env()
-        return cls(config) if config else None
+        configs = providers_from_env()
+        return cls(configs[0]) if configs else None
 
     def plan(self, intent: str, context: dict) -> list[ToolCall]:
         messages = [
@@ -81,7 +128,7 @@ class ModelPlanner:
             calls = parse_calls(choice.get("tool_calls") or [])
             if not calls:
                 raise ToolError("model returned no tool call")
-            self.last_route = f"model:{self.config.model}"
+            self.last_route = self.config.route
             return calls
         except (ToolError, KeyError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError) as error:
             self.last_route = f"rules (model unavailable: {type(error).__name__})"
@@ -106,7 +153,7 @@ class ModelPlanner:
             )
             text = payload["choices"][0]["message"]["content"].strip()
             self.assert_numbers_are_given(text, given)
-            self.last_route = f"model:{self.config.model}"
+            self.last_route = self.config.route
             return text
         except (NumberFabrication, ToolError, KeyError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError):
             self.last_route = "rules (narration fell back)"
@@ -135,17 +182,7 @@ class ModelPlanner:
         )
 
     def _post(self, body: dict) -> dict:
-        request = urllib.request.Request(
-            f"{self.config.base_url}/chat/completions",
-            data=json.dumps(body).encode(),
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config.api_key}",
-            },
-        )
-        with self._opener(request, timeout=self.config.timeout_sec) as response:
-            return json.loads(response.read())
+        return self.config.reply(body, self._opener)
 
 
 def _number_surface(results: list[dict]) -> dict:
