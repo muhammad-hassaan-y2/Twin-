@@ -27,9 +27,10 @@ repeat what the shape already says.
 
 Scrub ninety days by grabbing and turning the time wheel. Test a decision by
 pulling a ribbon out of the river, which spawns a second, smaller world beside the
-first. Test cancelling a subscription by pulling its pipe and letting it go back.
-Approve a purchase by holding a pinch for a full second; reject it by saying so out
-loud on a button. Every gesture is a request, never a mutation.
+first. Test cancelling a subscription by pulling its pipe: the same second miniature
+appears, and the twin says what the pipe was worth. Approve a purchase by holding a
+pinch for a full second; reject it by saying so out loud on a button. Every gesture
+is a request, never a mutation.
 
 Four weeks of history are seeded so the table is alive in the first minute, with no
 setup. A daily wind-down, a published accuracy score, and a garden that only the
@@ -57,6 +58,22 @@ A separate reliability check treats a settled payment as unfinished until its
 business effect is seen. Until then the twin says so in the daily heartbeat — money
 taken, outcome not observed — rather than marking the job done. The garden stays a
 forecast score: only resolved predictions grow it.
+
+## Whose table this is
+
+Anyone can open a world. An account is created with an email and a password, and a
+browser that has never signed in provisions its own so the table is never empty;
+every request after that carries a bearer token, and a request without one is
+refused rather than answered with somebody else's cash flow. A world is written down
+after every change, so the same table, the same history and the same ceilings are
+there after a restart.
+
+Nothing the twin did is thrown away. Each ask, verdict, rule, gesture and
+reconciliation is kept as an append-only log and can be read back as entries or as a
+summary in sentences — which is what a director of finance actually needs: not a
+chat transcript, but who asked for what, what stopped it, and what is still open.
+A withdrawal asked for after the money has already moved is recorded as the attempt
+it was.
 
 ## Accessibility
 
@@ -91,13 +108,28 @@ credentials, never values checked into this repository: `LLM_API_KEY`,
 `PAYPAL_SECRET`, `PAYPAL_ENVIRONMENT` for settlement. With no model keys the service
 still answers and says which route it took. With no PayPal credentials it settles
 against a deterministic sandbox transport; the real transport has to be asked for
-explicitly and refuses to start without its credentials.
+explicitly and refuses to start without its credentials. `TWIN_DB_PATH` moves the
+store and `TWIN_ALLOW_ORIGINS` says which client origins may call it.
+
+A headset has no keyboard, so the client signs itself in: the first visit opens its
+own account and keeps it. To put a table on an account you already have, open the
+app once with `?email=...&password=...` and it joins that world from then on.
 
 ## Verification status
 
-Backend behaviour is covered by its test suite. The client typechecks, builds, and
-its scene document validates against the SDK's own schema and component catalog, so
-every asset id, component and field the code and the scene name is real. Live
-visual and XR evidence was **not** captured: the managed editor on this machine
-never became command-ready, so no screenshot, gesture or framing claim here should
-be taken as tested until someone runs it.
+The service is covered by 118 tests that run the forecast, the forks, the policy
+engine, the payment state machine, the accounts, the audit trail and the real PayPal
+transport against a gateway that answers on a socket.
+
+The client typechecks and builds, and its scene document validates against the SDK's
+own schema and component catalog, so every asset id, component and field the code
+names is real. Its new paths were then run in a real browser against the dev server:
+an account is provisioned before the first fetch, every request after it carries a
+bearer token, an anonymous request is refused, a pipe pulled with a pointer forks a
+second world, and a payment left in **unknown** is reconciled by the client on the
+next heartbeat without being asked.
+
+Live immersive evidence was **not** captured on this machine: the managed XR browser
+would not start alongside the browser already running here, so no claim about headset
+poses, hand tracking, controller rays or framing should be read as tested. Run
+`npm run dev` on a clean machine to get that evidence.
