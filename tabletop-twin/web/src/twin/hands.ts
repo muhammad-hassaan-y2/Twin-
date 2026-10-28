@@ -8,11 +8,10 @@
  */
 
 import { Grabbed, Object3D, createSystem, type Entity } from '@iwsdk/core';
+import { APPROVAL_GESTURE, APPROVAL_HOLD_SEC } from './client.js';
 import { twin } from './controller.js';
 import { ApprovalPrompt, ForkRibbon, SubscriptionPipe, TimeWheel } from './components.js';
 
-/** A pinch shorter than this is not an approval. It is an accident. */
-export const APPROVAL_HOLD_SEC = 1;
 /** How far a pipe or ribbon must travel before the twin treats it as a pull. */
 export const PULL_METRES = 0.05;
 
@@ -92,7 +91,7 @@ export class TwinHandsSystem extends createSystem({
     if (pulled < PULL_METRES) return;
     const eventKey = entity.getValue(SubscriptionPipe, 'eventKey') ?? '';
     const label = entity.getValue(SubscriptionPipe, 'label') ?? eventKey;
-    if (eventKey) void twin.propose('cancel_subscription', eventKey, `pulled the ${label} pipe`);
+    if (eventKey) void twin.pull(eventKey, label);
   }
 
   private releaseRibbon(entity: Entity): void {
@@ -113,7 +112,7 @@ export class TwinHandsSystem extends createSystem({
       if (armed || hold < APPROVAL_HOLD_SEC) continue;
       entity.setValue(ApprovalPrompt, 'armed', true);
       const action = twin.pending;
-      if (action) void twin.approve(action.action_id, 'hold-pinch');
+      if (action) void twin.approve(action.action_id, APPROVAL_GESTURE);
     }
   }
 

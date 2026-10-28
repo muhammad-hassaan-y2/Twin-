@@ -46,6 +46,31 @@ export interface Branch {
   verdict: string;
 }
 
+/** What a forked world cost or bought, beside the one already on the table. */
+export interface Fork {
+  branch: string;
+  label: string;
+  delta: {
+    key: string;
+    label: string;
+    min_balance_change_dollars: number;
+    cost_change_dollars: number;
+    dry_probability_change: number;
+    shortfall_day_change: number | null;
+    verdict: string;
+  };
+}
+
+export interface Payment {
+  action_id: string;
+  state: string;
+  recipient: string;
+  amount_dollars: number;
+  attempt: number;
+  idempotency_key: string;
+  verified: boolean;
+}
+
 export interface ScenePayload {
   meta: {
     persona: string;
@@ -76,6 +101,7 @@ export interface ScenePayload {
     reliability: ReliabilityBin[];
   };
   branches: Branch[];
+  payments: Payment[];
   focus: string;
   twin: { look_at: string; speak: string };
 }
@@ -101,28 +127,118 @@ export interface Verdict {
 
 const BASE = (import.meta.env.VITE_TWIN_API ?? 'http://localhost:8000').replace(/\/+$/u, '');
 
+/** The only gesture string the payment state machine will settle with. */
+/** A pinch shorter than this is not an approval. It is an accident. */
+export const APPROVAL_HOLD_SEC = 1;
+export const APPROVAL_GESTURE = `pinch_hold_${APPROVAL_HOLD_SEC}s`;
+
+export interface Account {
+  token: string;
+  user_id: string;
+  name: string;
+}
+
+const TOKEN_KEY = 'twin.token';
+const NAME_KEY = 'twin.account';
+const DEVICE_KEY = 'twin.device';
+
+/**
+ * Which world this browser is looking at.
+ *
+ * The token is the bearer credential the twin issued; without it every endpoint
+ * answers 401, so a table that never signed in is a table that draws nothing.
+ */
+export const session = {
+  get token(): string | null {
+    return localStorage.getItem(TOKEN_KEY);
+  },
+
+  get name(): string {
+    return localStorage.getItem(NAME_KEY) ?? '';
+  },
+
+  set(account: Account | null): void {
+    if (account) {
+      localStorage.setItem(TOKEN_KEY, account.token);
+      localStorage.setItem(NAME_KEY, account.name);
+      return;
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(NAME_KEY);
+  },
+
+  /** The credentials of the world this browser made for itself, kept so a reload rejoins it. */
+  device(): { email: string; password: string } {
+    const saved = localStorage.getItem(DEVICE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as { email?: string; password?: string };
+        if (parsed.email && parsed.password) return { email: parsed.email, password: parsed.password };
+      } catch {
+        // A half-written entry is just a missing one.
+      }
+    }
+    const bytes = new Uint8Array(9);
+    crypto.getRandomValues(bytes);
+    const id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const account = { email: `twin-${id}@table.local`, password: id.repeat(2) };
+    localStorage.setItem(DEVICE_KEY, JSON.stringify(account));
+    return account;
+  },
+};
+
+function headers(extra: Record<string, string> = {}): Record<string, string> {
+  const token = session.token;
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
+
+async function request<T>(path: string, init: RequestInit): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, init);
+  if (!response.ok) {
+    if (response.status === 401 && session.token) session.set(null);
+    throw new Error(`${path} -> ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
+  return request<T>(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body ?? {}),
   });
-  if (!response.ok) throw new Error(`${path} -> ${response.status}`);
-  return (await response.json()) as T;
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`);
-  if (!response.ok) throw new Error(`${path} -> ${response.status}`);
-  return (await response.json()) as T;
+  return request<T>(path, { method: 'GET', headers: headers() });
 }
 
 export const twinApi = {
+  signup: (email: string, password: string, name = '') => post<Account>('/v1/signup', { email, name, password }),
+  login: (email: string, password: string) => post<Account>('/v1/login', { email, password }),
+  logout: () => post<{ signed_out: boolean }>('/v1/logout', {}),
+  me: () => get<{ user_id: string; name: string; persona: string; day: number; horizon_days: number; events: number }>('/v1/me'),
   world: () => get<ScenePayload>('/v1/world'),
-  health: () => get<{ planner: string; route: string; persona: string }>('/v1/health'),
-  persona: () => get<{ name: string; voice_prompt?: string; steps: { slug: string; title: string }[] }>('/v1/persona'),
+  health: () => get<{
+    ok: boolean;
+    persona: string;
+    planner: string;
+    route: string;
+    model_providers: string[];
+    heartbeat_steps: string[];
+    heartbeat_unwired: string[];
+    paypal_configured: boolean;
+    accounts: boolean;
+  }>('/v1/health'),
+  persona: () => get<{
+    name: string;
+    voice: string;
+    prohibitions: string[];
+    loop: string[];
+    heartbeat: { slug: string; index: number; title: string; body: string }[];
+  }>('/v1/persona'),
   scrub: (day: number) => post<{ day: number; scene: ScenePayload }>('/v1/scrub', { day }),
-  pull: (event_id: string) => post<{ fork: unknown; scene: ScenePayload }>('/v1/pull', { event_id }),
+  pull: (event_id: string) => post<{ fork: Fork; scene: ScenePayload }>('/v1/pull', { event_id }),
   tick: (days: number, final_of_day: boolean) =>
     post<{ day: number; captions: Caption[]; scene: ScenePayload }>('/v1/tick', { days, final_of_day }),
   ask: (intent: string) =>
@@ -130,5 +246,5 @@ export const twinApi = {
   propose: (calls: unknown[]) => post<{ results: Record<string, unknown>[]; scene: ScenePayload }>('/v1/tools', { calls }),
   approve: (action_id: string, gesture: string) =>
     post<{ action_id: string; state: string; error?: string }>('/v1/approve', { action_id, gesture }),
-  reconcile: (action_id: string) => post<Record<string, unknown>>('/v1/reconcile', { action_id }),
+  reconcile: (action_id: string) => post<{ action_id: string; state: string }>('/v1/reconcile', { action_id }),
 };

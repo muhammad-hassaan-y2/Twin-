@@ -105,7 +105,7 @@ export class TwinVoiceSystem extends createSystem({
       text: twin.offline ? 'offline' : (latest?.step ?? 'idle'),
     });
     panel?.getElementById<UIKit.Text>('StatusLine')?.setProperties({
-      text: twin.route || 'planner: not reached',
+      text: [twin.route || 'planner: not reached', twin.account].filter(Boolean).join('  ·  '),
     });
 
     const pending = twin.pending;
