@@ -1,0 +1,224 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.96, 0.94, 0.9, 1],
+      "equator": [0.72, 0.7, 0.66, 1],
+      "ground": [0.42, 0.38, 0.34, 1],
+      "intensity": 0.22
+    }
+  },
+  "environment": {
+    "toneMapping": "aces",
+    "exposure": 1,
+    "shadows": true,
+    "shadowMapType": "pcf"
+  },
+  "resources": {},
+  "nodes": [
+    {
+      "id": "tabletop",
+      "name": "Tabletop",
+      "framingRole": "content",
+      "transform": { "position": [0, 0.72, -0.62] },
+      "components": {
+        "TwinState": { "day": 0, "horizonDays": 90, "pinchDay": -1 }
+      },
+      "children": [
+        {
+          "id": "table-shadow",
+          "name": "Table Shadow",
+          "transform": { "position": [0, 0.001, 0] },
+          "components": {
+            "ShadowCatcher": { "size": [1.8, 1.2], "opacity": 0.3 }
+          }
+        },
+        {
+          "id": "banks",
+          "name": "Banks",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "stones",
+          "name": "Stones",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "boats",
+          "name": "Boats",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "pipes",
+          "name": "Pipes",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "garden",
+          "name": "Garden",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "branches",
+          "name": "Branches",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "river",
+          "name": "River",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-river" },
+          "transform": { "position": [0, 0, 0], "scale": [0.9, 1, 1] },
+          "components": {
+            "RiverFlow": { "dryAt": -1, "flow": 1 }
+          }
+        },
+        {
+          "id": "lake",
+          "name": "Savings Lake",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-lake" },
+          "transform": { "position": [0.4, 0, -0.16] }
+        },
+        {
+          "id": "fork-ribbon",
+          "name": "Fork Ribbon",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-ribbon" },
+          "transform": { "position": [0, 0.016, 0.005] },
+          "components": {
+            "ForkRibbon": { "branchId": "", "pull": 0 },
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "MoveFromTarget",
+              "returnToOrigin": true,
+              "translate": true,
+              "rotate": false,
+              "scale": false
+            }
+          }
+        },
+        {
+          "id": "time-wheel",
+          "name": "Time Wheel",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-wheel" },
+          "transform": { "position": [-0.42, 0.01, 0.21], "scale": 0.82 },
+          "components": {
+            "TimeWheel": { "day": 0, "turnDeg": 0 },
+            "RayInteractable": {},
+            "OneHandGrabbable": {
+              "rotate": true,
+              "translate": false,
+              "rotateMin": [0, -6.2832, 0],
+              "rotateMax": [0, 6.2832, 0]
+            }
+          }
+        },
+        {
+          "id": "approval-token",
+          "name": "Approval Token",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-token" },
+          "transform": { "position": [0.16, 0.008, 0.24] },
+          "components": {
+            "ApprovalPrompt": { "hold": 0, "armed": false },
+            "OneHandGrabbable": { "rotate": false, "translate": true }
+          }
+        },
+        {
+          "id": "orb",
+          "name": "Twin Orb",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-orb" },
+          "transform": { "position": [0.34, 0.16, 0.24] },
+          "components": {
+            "TwinOrb": { "mood": "idle", "accuracyPct": 0 }
+          }
+        },
+        {
+          "id": "captions",
+          "name": "Captions",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-captions" },
+          "transform": { "position": [-0.02, 0.42, -0.24], "rotationDeg": [-8, 0, 0] },
+          "components": {
+            "RayInteractable": {}
+          }
+        },
+        {
+          "id": "approve",
+          "name": "Approve Panel",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-approve" },
+          "transform": { "position": [0.56, 0.26, 0.12], "rotationDeg": [-6, -18, 0] },
+          "components": {
+            "RayInteractable": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "key-light",
+      "name": "Key Light",
+      "transform": {
+        "position": [-1.6, 4.2, 1.2],
+        "rotationDeg": [-70, -20, 0]
+      },
+      "components": {
+        "DirectionalLight": {
+          "color": [1, 0.95, 0.88, 1],
+          "intensity": 1.8,
+          "castShadow": true,
+          "shadowMapSize": "1024",
+          "shadowCameraSize": 2.5,
+          "shadowCameraNear": 1,
+          "shadowCameraFar": 12,
+          "shadowRadius": 4,
+          "shadowBias": -0.0004,
+          "shadowNormalBias": 0.01
+        }
+      }
+    },
+    {
+      "id": "fill-light",
+      "name": "Fill Light",
+      "components": {
+        "HemisphereLight": {
+          "skyColor": [0.95, 0.94, 0.9, 1],
+          "groundColor": [0.5, 0.46, 0.42, 1],
+          "intensity": 0.85
+        }
+      }
+    }
+  ],
+  "authoring": {
+    "views": [
+      {
+        "id": "hero",
+        "role": "hero",
+        "projection": "perspective",
+        "position": [0, 1.32, 0.86],
+        "target": [0, 0.74, -0.6],
+        "fov": 46
+      },
+      {
+        "id": "spawn",
+        "role": "diagnostic",
+        "projection": "perspective",
+        "position": [0, 1.6, 0],
+        "target": [0, 0.74, -0.62],
+        "fov": 70
+      },
+      {
+        "id": "top",
+        "role": "diagnostic",
+        "projection": "orthographic",
+        "position": [0, 2.4, -0.62],
+        "target": [0, 0.72, -0.62],
+        "height": 1.3
+      }
+    ]
+  }
+}

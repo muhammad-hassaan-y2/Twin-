@@ -1,0 +1,70 @@
+<div class="card">
+  <style>
+    .card {
+      display: flex;
+      flex-direction: column;
+      width: 64;
+      padding: 4;
+      gap: 2.6;
+      background-color: #10151c;
+      border-color: #33414f;
+      border-width: 0.7;
+      border-radius: 2.4;
+    }
+    .head {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chip {
+      font-size: 1.9;
+      font-weight: 700;
+      color: #0e1116;
+      background-color: #ffd166;
+      padding-top: 0.8;
+      padding-bottom: 0.8;
+      padding-left: 1.6;
+      padding-right: 1.6;
+      border-radius: 1.2;
+    }
+    .status {
+      font-size: 1.6;
+      color: #8fa1b3;
+    }
+    .caption {
+      font-size: 2.9;
+      color: #f2e8c9;
+      text-align: left;
+    }
+    .row {
+      display: flex;
+      flex-direction: row;
+      gap: 1.6;
+    }
+    .ask {
+      font-size: 1.8;
+      color: #f2e8c9;
+      background-color: #1f2a36;
+      border-color: #4a5f74;
+      border-width: 0.5;
+      border-radius: 1.4;
+      padding-top: 1.4;
+      padding-bottom: 1.4;
+      padding-left: 2;
+      padding-right: 2;
+      cursor: pointer;
+    }
+  </style>
+  <div class="head">
+    <span id="CaptionStep" class="chip">idle</span>
+    <span id="StatusLine" class="status">planner: not reached</span>
+  </div>
+  <span id="CaptionText" class="caption">Waking the miniature.</span>
+  <div class="row">
+    <button id="Btn-why" class="ask">Why so thin?</button>
+    <button id="Btn-driest" class="ask">Worst day</button>
+    <button id="Btn-cancel" class="ask">Cancel a sub</button>
+    <button id="Btn-best" class="ask">Best move</button>
+  </div>
+</div>
