@@ -20,6 +20,15 @@ def test_a_tick_speaks_at_most_once():
         assert len({u.step for u in spoken}) <= 2
 
 
+def test_the_closing_line_follows_an_observation():
+    """Step 6 is the day's summary, so an observation earlier in the loop must not silence it."""
+    session = fresh()
+    session.day = 30
+    spoken = heartbeat.tick(session, final_of_day=True)
+    assert spoken[-1].step == "wind-down"
+    assert len([u for u in spoken if u.step != "wind-down"]) <= 1
+
+
 def test_she_does_not_repeat_herself():
     session = fresh()
     session.day = 30
@@ -102,7 +111,9 @@ def test_an_unnamed_check_is_a_miss_not_a_pass():
 def test_wind_down_carries_the_real_score_and_garden():
     session = fresh()
     calibration = session.calibration
-    line = heartbeat.wind_down(session)[0].text
+    # Step 6 belongs to the last tick of a day, so it stays quiet before then.
+    assert heartbeat.wind_down(session) == []
+    line = heartbeat.wind_down(session, final_of_day=True)[0].text
     assert f"{calibration.garden_stage}" in line
     if calibration.accuracy_pct is not None:
         assert f"{calibration.accuracy_pct} percent" in line

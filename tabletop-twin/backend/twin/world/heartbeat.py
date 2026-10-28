@@ -1,10 +1,14 @@
 """The heartbeat: what the twin does when nobody asks it anything.
 
-Steps run in the order ``heartbeat.md`` lists them. Each one is a question to the
-code, never a request to a model, so the loop works with no key and no network.
+Steps run in the order ``heartbeat.md`` lists them, and the markdown is the only
+place that order lives — add a numbered step there and this module refuses to run
+until a rule answers it. Each step is a question to the code, never a request to
+a model, so the loop works with no key and no network.
 """
 
 from __future__ import annotations
+
+from typing import Callable
 
 from twin.domain.events import CashEvent
 from twin.domain.learning import Prediction
@@ -14,26 +18,48 @@ from twin.world.session import Session, Utterance, dollars
 MATERIAL_CENTS = 1_000
 LOOK_AHEAD_DAYS = 14
 
+Rule = Callable[..., list[Utterance]]
+
+
+class MissingRule(RuntimeError):
+    """A step the markdown promises and no code keeps."""
+
+
+def loop(session: Session) -> list[tuple[str, Rule]]:
+    """The order comes from the document; the code only supplies the behaviour."""
+    out = []
+    for step in session.persona.steps:
+        if step.index not in RULES:
+            raise MissingRule(f"heartbeat.md step {step.index} '{step.title}' has no rule that answers to it")
+        out.append(RULES[step.index])
+    return out
+
+
+def unwired(session: Session) -> list[int]:
+    """Step numbers a rule implements that the document no longer asks for."""
+    return sorted(index for index in RULES if index not in {step.index for step in session.persona.steps})
+
 
 def tick(session: Session, final_of_day: bool = False) -> list[Utterance]:
     spoken: list[Utterance] = []
-    for name, rule in (
-        ("resolve", resolve_due),
-        ("upstream", stuck_boats),
-        ("thin-spot", thin_spot),
-        ("test", one_test),
-        ("money", unfinished_money),
-    ):
-        for utterance in rule(session)[:1]:
-            if utterance.text in session.spoken_recently:
+    # "Never repeat the same observation on two consecutive ticks" — the set holds only
+    # what the last tick said, so an observation is allowed to come back a day later.
+    previous = set(session.spoken_recently)
+    session.spoken_recently.clear()
+    observed = False
+    for slug, rule in loop(session):
+        # The wind-down is the day's closing line, not a competing observation, so it
+        # speaks on the final tick even when the table already said something.
+        if observed and slug != CLOSING:
+            continue
+        for utterance in rule(session, final_of_day)[:1]:
+            if utterance.text in previous:
                 continue
             session.spoken_recently.add(utterance.text)
             spoken.append(utterance)
-        if spoken:
-            break  # two observations in one tick is a wall of speech, not a person
-    if final_of_day:
-        spoken.extend(wind_down(session))
-    session.log.append({"day": session.day, "heartbeat": [u.step for u in spoken]})
+        if spoken and slug != CLOSING:
+            observed = True  # two observations in one tick is a wall of speech, not a person
+    session.record("heartbeat", {"steps": [u.step for u in spoken], "final_of_day": final_of_day})
     return spoken
 
 
@@ -43,7 +69,7 @@ def advance(session: Session, days: int = 1, final_of_day: bool = False) -> list
 
 
 # 1 ------------------------------------------------------------------ resolve
-def resolve_due(session: Session) -> list[Utterance]:
+def resolve_due(session: Session, final_of_day: bool = False) -> list[Utterance]:
     out = []
     for prediction in session.calibration.records:
         if not prediction.due_by(session.day):
@@ -91,7 +117,7 @@ def late_probability(event: CashEvent) -> float:
     return round(sum(1 for d in event.lateness_days if d > 0) / len(event.lateness_days), 2)
 
 
-def stuck_boats(session: Session) -> list[Utterance]:
+def stuck_boats(session: Session, final_of_day: bool = False) -> list[Utterance]:
     out = []
     events = [e for e in session.ledger.events if e.is_chasable() and e.lateness_days]
     # Biggest first: if she only gets to mention one boat, it is the one worth chasing.
@@ -112,7 +138,7 @@ def stuck_boats(session: Session) -> list[Utterance]:
 
 # 3 ---------------------------------------------------------------- thin spot
 
-def thin_spot(session: Session) -> list[Utterance]:
+def thin_spot(session: Session, final_of_day: bool = False) -> list[Utterance]:
     baseline = session.baseline
     window = range(session.day, min(session.day + LOOK_AHEAD_DAYS, baseline.horizon_days))
     days = [(d, baseline.p10[d]) for d in window]
@@ -131,7 +157,7 @@ def thin_spot(session: Session) -> list[Utterance]:
 
 # 4 --------------------------------------------------------------------- test
 
-def one_test(session: Session) -> list[Utterance]:
+def one_test(session: Session, final_of_day: bool = False) -> list[Utterance]:
     if session.tested_on_day == session.day:
         return []
     session.tested_on_day = session.day
@@ -173,7 +199,7 @@ def cheapest_pipe(session: Session) -> CashEvent | None:
 
 # 5 -------------------------------------------------------------------- money
 
-def unfinished_money(session: Session) -> list[Utterance]:
+def unfinished_money(session: Session, final_of_day: bool = False) -> list[Utterance]:
     out = []
     for record in session.machine.all():
         if record.state is PaymentState.UNKNOWN:
@@ -198,10 +224,13 @@ def unfinished_money(session: Session) -> list[Utterance]:
 
 # 6 ---------------------------------------------------------------- wind-down
 
-def wind_down(session: Session) -> list[Utterance]:
+def wind_down(session: Session, final_of_day: bool = False) -> list[Utterance]:
+    """Step 6 only speaks at the last tick of a day; on any other tick it stays silent."""
+    if not final_of_day:
+        return []
     baseline = session.baseline
     accuracy = session.calibration.accuracy_pct
-    tomorrow = [
+    return [
         Utterance(
             "wind-down",
             f"Day {session.day}: {dollars(baseline.p50[session.day])} dollars on the median path, "
@@ -211,4 +240,15 @@ def wind_down(session: Session) -> list[Utterance]:
             target="",
         )
     ]
-    return tomorrow
+
+
+CLOSING = "wind-down"
+
+RULES: dict[int, tuple[str, Rule]] = {
+    1: ("resolve", resolve_due),
+    2: ("upstream", stuck_boats),
+    3: ("thin-spot", thin_spot),
+    4: ("test", one_test),
+    5: ("money", unfinished_money),
+    6: (CLOSING, wind_down),
+}
