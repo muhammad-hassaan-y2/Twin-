@@ -100,24 +100,24 @@ class Intervention:
     params: dict[str, float] = field(default_factory=dict)
 
 
+def event_from_dict(item: dict) -> CashEvent:
+    return CashEvent(
+        id=str(item["id"]),
+        label=str(item["label"]),
+        kind=Kind(item["kind"]),
+        direction=Direction(item["direction"]),
+        amount_cents=int(item["amount_cents"]),
+        due_day=int(item["due_day"]),
+        counterparty=item.get("counterparty", ""),
+        recurring_every_days=item.get("recurring_every_days"),
+        occurrences=int(item.get("occurrences", 1)),
+        late_fee_cents=int(item.get("late_fee_cents", 0)),
+        lateness_days=tuple(int(d) for d in item.get("lateness_days", ())),
+    )
+
+
 def ledger_from_dict(raw: dict) -> Ledger:
-    events = []
-    for item in raw["events"]:
-        events.append(
-            CashEvent(
-                id=item["id"],
-                label=item["label"],
-                kind=Kind(item["kind"]),
-                direction=Direction(item["direction"]),
-                amount_cents=int(item["amount_cents"]),
-                due_day=int(item["due_day"]),
-                counterparty=item.get("counterparty", ""),
-                recurring_every_days=item.get("recurring_every_days"),
-                occurrences=int(item.get("occurrences", 1)),
-                late_fee_cents=int(item.get("late_fee_cents", 0)),
-                lateness_days=tuple(int(d) for d in item.get("lateness_days", ())),
-            )
-        )
+    events = [event_from_dict(item) for item in raw["events"]]
     return Ledger(
         opening_balance_cents=int(raw["opening_balance_cents"]),
         events=tuple(events),

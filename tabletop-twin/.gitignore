@@ -8,6 +8,11 @@ dist/
 .env.*
 .iwsdk/
 
+# A live table is accounts, tokens, decisions and payment records
+twin.db
+*.db-wal
+*.db-shm
+
 # Python caches
 __pycache__/
 *.py[cod]

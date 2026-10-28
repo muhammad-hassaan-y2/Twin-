@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from twin.domain.forecast import Forecast
 from twin.domain.interventions import compare
+from twin.payments.machine import TERMINAL
 from twin.world.heartbeat import late_probability
 from twin.world.session import Session, dollars
 
@@ -45,6 +46,7 @@ def scene_payload(session: Session) -> dict:
         "lake": lake(session),
         "garden": garden(session),
         "branches": branches(session),
+        "payments": payments(session),
         "focus": session.focus,
         "twin": {"look_at": session.focus, "speak": session.last_speech},
     }
@@ -122,6 +124,23 @@ def garden(session: Session) -> dict:
         "open": len(calibration.records) - calibration.resolved_count,
         "reliability": calibration.reliability_bins(),
     }
+
+
+def payments(session: Session) -> list[dict]:
+    """Money that has not landed yet. An UNKNOWN record is drawn, not hidden."""
+    return [
+        {
+            "action_id": record.action_id,
+            "state": record.state.value,
+            "recipient": record.recipient,
+            "amount_dollars": dollars(record.amount_cents),
+            "attempt": record.attempt,
+            "idempotency_key": record.idempotency_key,
+            "verified": record.verified_outcome is not None,
+        }
+        for record in session.machine.all()
+        if record.state not in TERMINAL
+    ]
 
 
 def branches(session: Session) -> list[dict]:

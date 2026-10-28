@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from twin.data import load_persona_ledger
@@ -17,13 +17,21 @@ from twin.domain.events import CashEvent, Direction, Ledger
 from twin.domain.forecast import Forecast, forecast_ledger
 from twin.domain.interventions import Branch, compare, fork
 from twin.domain.learning import Calibration, Outcome, Prediction
-from twin.payments.machine import ApprovalRequired, PaymentMachine, PaymentState
+from twin.payments.machine import (
+    TERMINAL,
+    ApprovalRequired,
+    IllegalTransition,
+    PaymentMachine,
+    PaymentRecord,
+    PaymentState,
+)
 from twin.payments.paypal import SandboxTransport
 from twin.persona.persona import Persona, load_persona
 from twin.planner.model import ModelPlanner
 from twin.planner.rules import RulePlanner
 from twin.planner.tools import ToolCall, handler_map, parse_calls
 from twin.policy.engine import Action, Policy, SpendWindow, evaluate
+from twin.store import Store
 
 DEFAULT_HORIZON = 90
 DEFAULT_RUNS = 2000
@@ -68,13 +76,16 @@ class Session:
     actions: dict[str, Action] = field(default_factory=dict)
     spoken_recently: set[str] = field(default_factory=set)
     tested_on_day: int = -1
+    settled_days: dict[str, int] = field(default_factory=dict)
+    store: Store | None = None
+    user_id: str = ""
     _baseline: Forecast | None = None
 
     @classmethod
     def build(cls, path: Path | None = None, use_model: bool = True) -> "Session":
         ledger, policy, history = load_persona_ledger(path)
         persona = load_persona(persona_id=ledger.persona_id)
-        planner: RulePlanner | ModelPlanner = ModelPlanner.from_env() or RulePlanner()
+        planner: RulePlanner | ModelPlanner = (ModelPlanner.from_env() if use_model else None) or RulePlanner()
         if isinstance(planner, ModelPlanner):
             planner.voice_prompt = persona.voice_prompt
         session = cls(ledger=ledger, policy=policy, persona=persona, planner=planner)
@@ -82,6 +93,133 @@ class Session:
         session.calibration = Calibration([_prediction(raw) for raw in history])
         session.branches["baseline"] = Branch(key="baseline", label="As things stand", forecast=session.baseline)
         return session
+
+    @classmethod
+    def restore(cls, store: Store, user_id: str) -> "Session":
+        """Rebuild a visitor's world from the database, exactly as they left it."""
+        row = store.world_row(user_id)
+        if row is None:
+            raise KeyError("that account has no world yet")
+        ledger = store.ledger_for(user_id, row["persona_id"], int(row["opening_balance_cents"]))
+        policy = store.policy_for(user_id, ledger)
+        persona = load_persona(persona_id=ledger.persona_id)
+        planner: RulePlanner | ModelPlanner = ModelPlanner.from_env() or RulePlanner()
+        if isinstance(planner, ModelPlanner):
+            planner.voice_prompt = persona.voice_prompt
+        session = cls(ledger=ledger, policy=policy, persona=persona, planner=planner, store=store, user_id=user_id)
+        session.machine = PaymentMachine(approval_floor_cents=policy.approval_floor_cents)
+        session.day = int(row["day"])
+        session.horizon_days = int(row["horizon_days"])
+        session.runs = int(row["runs"])
+        session.focus = row["focus"]
+        session.last_speech = row["last_speech"]
+        session.tested_on_day = int(row["tested_on_day"])
+        session.calibration = Calibration(store.load_predictions(user_id))
+        session._adopt_payments(store.load_payments(user_id))
+        session.branches["baseline"] = Branch(key="baseline", label="As things stand", forecast=session.baseline)
+        session._refork_saved_branches(store.load_branches(user_id))
+        return session
+
+    @classmethod
+    def seed_new_world(cls, store: Store, user_id: str) -> "Session":
+        """Copy the fictional ledger into a fresh account so the table is alive immediately."""
+        ledger, policy, history = load_persona_ledger()
+        store.create_world(user_id, ledger, policy)
+        session = cls.restore(store, user_id)
+        session.calibration = Calibration([_prediction(raw) for raw in history])
+        store.save_predictions(user_id, session.calibration.records)
+        return session
+
+    def _adopt_payments(self, rows: list[dict]) -> None:
+        for row in rows:
+            record = PaymentRecord(
+                action_id=row["action_id"],
+                amount_cents=int(row["amount_cents"]),
+                recipient=row["recipient"],
+                state=PaymentState(row["state"]),
+                attempt=int(row["attempt"]),
+                idempotency_key=row["idempotency_key"],
+                provider_ref=row["provider_ref"],
+                history=[tuple(entry) for entry in json.loads(row["history_json"])],
+                verified_outcome=row["verified_outcome"],
+            )
+            self.machine.adopt(record)
+            action = Action(
+                id=record.action_id,
+                verb=row["verb"],
+                amount_cents=record.amount_cents,
+                recipient=record.recipient,
+                direction=row["direction"],
+            )
+            self.actions[record.action_id] = action
+            if record.state not in TERMINAL:
+                self.pending[record.action_id] = record.idempotency_key
+            if record.state is PaymentState.SUCCEEDED:
+                settled_day = int(row["settled_day"] or 0)
+                self.settled_days[record.idempotency_key] = settled_day
+                self.window.record(settled_day, action)
+
+    def _refork_saved_branches(self, definitions: list[dict]) -> None:
+        if not definitions:
+            return
+        worlds = fork(
+            self.ledger,
+            self.branches["baseline"],
+            [
+                Branch(
+                    key=each["key"],
+                    label=each["label"],
+                    forecast=self.baseline,
+                    cancelled_ids=each["cancelled"],
+                    chase_ids=each["chase"],
+                    shifted=each["shifted"],
+                )
+                for each in definitions
+            ],
+            horizon_days=self.horizon_days,
+            runs=self.runs,
+            seed=SEED,
+        )
+        for key, world in worlds.items():
+            if key != "baseline":
+                self.branches[key] = world
+
+    def persist(self) -> None:
+        """Write what this turn changed. A twin that forgets is a toy."""
+        if self.store is None or not self.user_id:
+            return
+        self.store.save_world(
+            self.user_id,
+            day=self.day,
+            horizon_days=self.horizon_days,
+            runs=self.runs,
+            focus=self.focus,
+            last_speech=self.last_speech,
+            tested_on_day=self.tested_on_day,
+        )
+        self.store.save_predictions(self.user_id, self.calibration.records)
+        for record in self.machine.all():
+            action = self.actions.get(record.action_id)
+            self.store.save_payment(
+                self.user_id,
+                record,
+                verb=action.verb if action else "pay_bill",
+                direction=action.direction if action else "out",
+                settled_day=self.settled_days.get(record.idempotency_key),
+            )
+        for key, branch in self.branches.items():
+            if key == "baseline":
+                continue
+            self.store.save_branch(
+                self.user_id, key, branch.label, branch.cancelled_ids, branch.chase_ids, branch.shifted
+            )
+
+    def record(self, kind: str, payload: dict) -> None:
+        """One line in the trail. Everything the twin decided is written, not just said."""
+        entry = {"day": self.day, "kind": kind, **payload}
+        self.log.append(entry)
+        if self.store is not None and self.user_id:
+            self.store.append_log(self.user_id, self.day, kind, payload)
 
     # ---------------------------------------------------------------- numbers
 
@@ -226,7 +364,11 @@ class Session:
             direction=("in" if event and event.direction is Direction.IN else "out") if is_charge else "none",
         )
         decision = evaluate(action, self.policy, self.window, self.day)
-        self.log.append({"day": self.day, "tool": "propose_action", "verb": verb, "verdict": decision.verdict.value, "rule": decision.rule})
+        self.record(
+            "policy",
+            {"tool": "propose_action", "verb": verb, "verdict": decision.verdict.value, "rule": decision.rule,
+             "amount_cents": amount, "recipient": who},
+        )
         payload = {
             "action_id": action.id,
             "verb": verb,
@@ -257,6 +399,9 @@ class Session:
         self.actions[action.id] = action
         if decision.verdict.value == "deny":
             payload["state"] = self.machine.cancel(record, f"policy: {decision.rule}").state.value
+            # A policy denial is finished business. Leaving it "pending" would invite a
+            # human to reject something that already cannot move.
+            self.pending.pop(action.id, None)
         elif decision.verdict.value == "allow":
             # Below the floor the policy itself is the approval; there is no gesture to wait for.
             self.machine.approve(record, "auto")
@@ -282,15 +427,61 @@ class Session:
         try:
             self.machine.approve(record, gesture)
         except ApprovalRequired as exc:
+            self.record("approval_refused", {"action_id": action_id, "gesture": gesture, "reason": str(exc)})
             return {"action_id": action_id, "state": record.state.value, "error": str(exc)}
+        self.record("approval", {"action_id": action_id, "gesture": gesture, "recipient": record.recipient,
+                                 "amount_cents": record.amount_cents})
         state = self._settle(record)
         return {"action_id": action_id, "state": state.value, "idempotency_key": record.idempotency_key}
 
+    def reject(self, action_id: str, reviewer: str, reason: str) -> dict:
+        """A human saying no, out of band. The UI closing a panel is not a decision."""
+        key = self.pending.get(action_id)
+        if key is None:
+            raise KeyError(f"nothing pending for {action_id}")
+        record = self.machine.get(key)
+        refusal = None
+        if record.state in {PaymentState.SUBMITTED, PaymentState.UNKNOWN, PaymentState.RECONCILING}:
+            refusal = f"{record.state.value} — the money has already left, so this needs a recall, not a rejection"
+        elif record.state in TERMINAL:
+            refusal = f"{record.state.value} is already settled"
+        # Logged whether or not it lands, so an auditor sees the ask that could not be withdrawn.
+        self.record(
+            "rejection",
+            {"action_id": action_id, "reviewer": reviewer, "reason": reason,
+             "state": record.state.value, "applied": refusal is None},
+        )
+        if refusal is not None:
+            raise IllegalTransition(refusal)
+        self.machine.cancel(record, f"rejected by {reviewer}: {reason}")
+        self.pending.pop(action_id, None)
+        return {"action_id": action_id, "state": record.state.value, "rejected": True}
+
+    def retry_payment(self, action_id: str) -> dict:
+        """Reachable from a route now: a failed payment can be offered again, an unknown one cannot."""
+        key = self.pending.get(action_id)
+        if key is None:
+            raise KeyError(f"nothing pending for {action_id}")
+        record = self.machine.retry(self.machine.get(key))
+        self.pending[action_id] = record.idempotency_key
+        self.record("retry", {"action_id": action_id, "attempt": record.attempt, "state": record.state.value})
+        return {
+            "action_id": action_id,
+            "state": record.state.value,
+            "attempt": record.attempt,
+            "idempotency_key": record.idempotency_key,
+        }
+
     def reconcile(self, action_id: str) -> dict:
-        record = self.machine.get(self.pending[action_id])
-        state = self.machine.reconcile(record, self.transport).state
+        key = self.pending.get(action_id)
+        if key is None:
+            raise KeyError(f"nothing pending for {action_id}")
+        record = self.machine.reconcile(self.machine.get(key), self.transport)
+        state = record.state
         if state is PaymentState.SUCCEEDED:
             self.machine.verify_outcome(record, f"{record.recipient} settled")
+            self.settled_days[record.idempotency_key] = self.day
+        self.record("reconcile", {"action_id": action_id, "state": state.value, "recipient": record.recipient})
         return {"action_id": action_id, "state": state.value}
 
     def _settle(self, record) -> PaymentState:
@@ -298,6 +489,7 @@ class Session:
         self.machine.submit(record, self.transport)
         if record.state is PaymentState.SUCCEEDED:
             self.machine.verify_outcome(record, f"{record.recipient} settled")
+            self.settled_days[record.idempotency_key] = self.day
             action = self.actions.get(record.action_id)
             self.window.record(self.day, action or Action(id=record.action_id, verb="pay_bill", amount_cents=record.amount_cents))
         return record.state
@@ -323,8 +515,70 @@ class Session:
                 results.append({"error": f"unknown event '{exc.args[0]}'"})
         narration = self.planner.narrate(intent, results, context)
         self.last_speech = narration
-        self.log.append({"day": self.day, "intent": intent, "route": getattr(self.planner, "last_route", self.planner.name)})
+        self.record("intent", {"intent": intent, "route": getattr(self.planner, "last_route", self.planner.name),
+                               "calls": [c.tool for c in calls]})
         return {"intent": intent, "calls": [c.tool for c in calls], "results": results, "said": narration, "focus": self.focus}
+
+    # ------------------------------------------------------------------ ledger
+
+    def add_event(self, event: CashEvent, source: str = "manual") -> dict:
+        """Connect a workflow: a new bill, income or subscription enters the world."""
+        if event.id in self.ledger.ids():
+            raise ValueError(f"'{event.id}' is already on the ledger")
+        self.ledger = replace(self.ledger, events=(*self.ledger.events, event))
+        if event.counterparty and event.counterparty not in self.policy.allowed_recipients:
+            self.policy = replace(
+                self.policy, allowed_recipients=self.policy.allowed_recipients | {event.counterparty}
+            )
+            if self.store is not None and self.user_id:
+                self.store.put_policy(self.user_id, self.policy)
+        self._baseline = None
+        if self.store is not None and self.user_id:
+            self.store.put_event(self.user_id, event, source)
+        self.record("event_added", {"event_id": event.id, "label": event.label, "source": source,
+                                    "amount_cents": event.amount_cents})
+        return {"event": self._event_brief(event), "added": True}
+
+    def remove_event(self, event_id: str) -> dict:
+        event = self.ledger.by_id(event_id)
+        open_to = [r for r in self.machine.all() if r.state not in TERMINAL and r.recipient == event.counterparty]
+        if open_to:
+            raise ValueError(f"{event.label} still has {len(open_to)} open payment(s)")
+        dropped = [
+            key
+            for key, branch in self.branches.items()
+            if key != "baseline"
+            and (event_id in branch.cancelled_ids or event_id in branch.chase_ids or event_id in dict(branch.shifted))
+        ]
+        for key in dropped:
+            self.branches.pop(key)
+        self.ledger = replace(self.ledger, events=tuple(e for e in self.ledger.events if e.id != event_id))
+        self._baseline = None
+        if self.store is not None and self.user_id:
+            self.store.delete_event(self.user_id, event_id)
+            for key in dropped:
+                self.store.delete_branch(self.user_id, key)
+        self.record("event_removed", {"event_id": event_id, "label": event.label, "branches_dropped": dropped})
+        return {"removed": event_id, "branches_dropped": dropped}
+
+    def set_opening_balance(self, cents: int) -> dict:
+        self.ledger = replace(self.ledger, opening_balance_cents=int(cents))
+        self._baseline = None
+        if self.store is not None and self.user_id:
+            self.store.set_opening_balance(self.user_id, int(cents))
+        self.record("opening_balance_set", {"cents": int(cents)})
+        return {"opening_balance_cents": int(cents)}
+
+    def set_ceiling(self, recipient: str, cents: int | None) -> dict:
+        """A human, not the twin, sets how much one name may take."""
+        ceilings = {name: value for name, value in self.policy.recipient_ceilings if name != recipient}
+        if cents is not None:
+            ceilings[recipient] = int(cents)
+        self.policy = replace(self.policy, recipient_ceilings=tuple(sorted(ceilings.items())))
+        if self.store is not None and self.user_id:
+            self.store.set_recipient_ceiling(self.user_id, recipient, cents)
+        self.record("ceiling_set", {"recipient": recipient, "cents": cents})
+        return {"recipient": recipient, "ceiling_cents": cents}
 
 
 def _slug(text: str) -> str:

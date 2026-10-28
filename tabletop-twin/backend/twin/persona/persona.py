@@ -44,12 +44,6 @@ class Persona:
             " sentence, never a number you were not given."
         )
 
-    def step(self, slug: str) -> HeartbeatStep | None:
-        for step in self.steps:
-            if step.slug == slug:
-                return step
-        return None
-
 
 def load_persona(directory: Path | None = None, persona_id: str = "juno-reyes") -> Persona:
     root = directory or HERE
