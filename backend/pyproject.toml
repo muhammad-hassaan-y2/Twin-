@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabletop-twin"
+version = "0.1.0"
+description = "A miniature cash-flow world you manipulate with your hands."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.130",
+  "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["twin*"]
+
+[tool.setuptools.package-data]
+"twin.data" = ["*.json"]
+"twin.persona" = ["*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

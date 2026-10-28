@@ -1,0 +1,340 @@
+{
+  "persona_id": "juno-reyes",
+  "display_name": "Juno Reyes",
+  "note": "Entirely fictional. One freelance illustrator, one domain, one 90-day horizon.",
+  "currency": "USD",
+  "opening_balance_cents": 214500,
+  "events": [
+    {
+      "id": "inv-kepler",
+      "label": "Kepler Books cover art",
+      "kind": "income",
+      "direction": "in",
+      "amount_cents": 320000,
+      "due_day": 12,
+      "counterparty": "Kepler Books",
+      "late_fee_cents": 9000,
+      "lateness_days": [
+        2,
+        6,
+        11,
+        3
+      ]
+    },
+    {
+      "id": "inv-northwind",
+      "label": "Northwind mural",
+      "kind": "income",
+      "direction": "in",
+      "amount_cents": 480000,
+      "due_day": 38,
+      "counterparty": "Northwind Roasters",
+      "late_fee_cents": 15000,
+      "lateness_days": [
+        0,
+        14,
+        27,
+        41,
+        9
+      ]
+    },
+    {
+      "id": "inv-royalties",
+      "label": "Print royalties",
+      "kind": "income",
+      "direction": "in",
+      "amount_cents": 62000,
+      "due_day": 28,
+      "counterparty": "Milk Room Press",
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "late_fee_cents": 0,
+      "lateness_days": [
+        1,
+        3,
+        8
+      ]
+    },
+    {
+      "id": "inv-portrait",
+      "label": "Private commission",
+      "kind": "income",
+      "direction": "in",
+      "amount_cents": 90000,
+      "due_day": 20,
+      "counterparty": "Private client",
+      "late_fee_cents": 4500,
+      "lateness_days": [
+        4,
+        12,
+        22
+      ]
+    },
+    {
+      "id": "bill-rent",
+      "label": "Studio rent",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 78000,
+      "due_day": 1,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Ashgrove Studios"
+    },
+    {
+      "id": "bill-plan",
+      "label": "Tablet instalment",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 9900,
+      "due_day": 3,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Drawline Finance"
+    },
+    {
+      "id": "sub-adobe",
+      "label": "Vector suite",
+      "kind": "subscription",
+      "direction": "out",
+      "amount_cents": 6100,
+      "due_day": 6,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Suite Works"
+    },
+    {
+      "id": "sub-scan",
+      "label": "Scanning subscription",
+      "kind": "subscription",
+      "direction": "out",
+      "amount_cents": 24000,
+      "due_day": 9,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Highres Club"
+    },
+    {
+      "id": "sub-plates",
+      "label": "Print club box",
+      "kind": "subscription",
+      "direction": "out",
+      "amount_cents": 31000,
+      "due_day": 15,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Plate & Press"
+    },
+    {
+      "id": "bill-materials",
+      "label": "Paper and plates",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 24000,
+      "due_day": 17,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Ashgrove Paper"
+    },
+    {
+      "id": "bill-insurance",
+      "label": "Liability insurance",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 31500,
+      "due_day": 24,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "Guild Mutual"
+    },
+    {
+      "id": "bill-tax",
+      "label": "Quarterly estimated tax",
+      "kind": "tax",
+      "direction": "out",
+      "amount_cents": 210000,
+      "due_day": 47,
+      "counterparty": "Revenue Service"
+    },
+    {
+      "id": "bill-crown",
+      "label": "Dental crown",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 45000,
+      "due_day": 63,
+      "counterparty": "Union Dental"
+    },
+    {
+      "id": "save-lake",
+      "label": "Move to savings",
+      "kind": "bill",
+      "direction": "out",
+      "amount_cents": 40000,
+      "due_day": 5,
+      "recurring_every_days": 30,
+      "occurrences": 3,
+      "counterparty": "The Lake"
+    },
+    {
+      "id": "inv-workshop",
+      "label": "Gouache workshop",
+      "kind": "income",
+      "direction": "in",
+      "amount_cents": 145000,
+      "due_day": 33,
+      "counterparty": "Ashgrove Adult School",
+      "late_fee_cents": 0,
+      "lateness_days": [
+        0,
+        2,
+        4,
+        1
+      ]
+    }
+  ],
+  "policy": {
+    "max_single_cents": 25000,
+    "daily_spend_cap_cents": 60000,
+    "monthly_spend_cap_cents": 400000,
+    "approval_floor_cents": 5000,
+    "max_new_subscriptions_per_week": 2,
+    "allowed_recipients": [
+      "Ashgrove Studios",
+      "Drawline Finance",
+      "Suite Works",
+      "Highres Club",
+      "Plate & Press",
+      "Ashgrove Paper",
+      "Guild Mutual",
+      "Revenue Service",
+      "Union Dental",
+      "The Lake"
+    ]
+  },
+  "history": {
+    "weeks": 4,
+    "predictions": [
+      {
+        "id": "p-101",
+        "subject": "inv-kepler",
+        "statement": "Kepler clears inside two weeks of the due date.",
+        "probability": 0.7,
+        "made_on_day": -27,
+        "resolves_on_day": -13,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-102",
+        "subject": "sub-scan",
+        "statement": "The scanning subscription is worth keeping this quarter.",
+        "probability": 0.6,
+        "made_on_day": -26,
+        "resolves_on_day": -12,
+        "outcome": "missed",
+        "tool": "fork"
+      },
+      {
+        "id": "p-103",
+        "subject": "bill-rent",
+        "statement": "Rent lands the day it is due.",
+        "probability": 0.9,
+        "made_on_day": -24,
+        "resolves_on_day": -22,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-104",
+        "subject": "inv-royalties",
+        "statement": "Royalties arrive before the insurance payment.",
+        "probability": 0.5,
+        "made_on_day": -21,
+        "resolves_on_day": -8,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-105",
+        "subject": "inv-northwind",
+        "statement": "Northwind pays on time if chased once.",
+        "probability": 0.8,
+        "made_on_day": -20,
+        "resolves_on_day": -6,
+        "outcome": "missed",
+        "tool": "fork"
+      },
+      {
+        "id": "p-106",
+        "subject": "bill-materials",
+        "statement": "Paper spend stays under budget.",
+        "probability": 0.65,
+        "made_on_day": -17,
+        "resolves_on_day": -11,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-107",
+        "subject": "save-lake",
+        "statement": "The move to savings happens without touching the river.",
+        "probability": 0.75,
+        "made_on_day": -15,
+        "resolves_on_day": -9,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-108",
+        "subject": "inv-portrait",
+        "statement": "The private commission pays within a fortnight.",
+        "probability": 0.6,
+        "made_on_day": -12,
+        "resolves_on_day": -2,
+        "outcome": "missed",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-109",
+        "subject": "bill-plan",
+        "statement": "The tablet instalment is small enough to ignore.",
+        "probability": 0.85,
+        "made_on_day": -10,
+        "resolves_on_day": -5,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-110",
+        "subject": "sub-plates",
+        "statement": "Cancelling the print box buys a safer week.",
+        "probability": 0.55,
+        "made_on_day": -8,
+        "resolves_on_day": -1,
+        "outcome": "hit",
+        "tool": "fork"
+      },
+      {
+        "id": "p-111",
+        "subject": "bill-tax",
+        "statement": "The quarterly set-aside is already covered.",
+        "probability": 0.45,
+        "made_on_day": -5,
+        "resolves_on_day": -1,
+        "outcome": "hit",
+        "tool": "forecast"
+      },
+      {
+        "id": "p-112",
+        "subject": "inv-kepler",
+        "statement": "Chasing Kepler pulls it in by a week.",
+        "probability": 0.7,
+        "made_on_day": -3,
+        "resolves_on_day": -1,
+        "outcome": "missed",
+        "tool": "fork"
+      }
+    ]
+  }
+}
