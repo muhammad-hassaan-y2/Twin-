@@ -11,6 +11,7 @@ export interface Stone {
   label: string;
   kind: string;
   day: number;
+  country: string;
   amount_dollars: number;
   height: number;
   below_surface: boolean;
@@ -65,7 +66,11 @@ export interface Payment {
   action_id: string;
   state: string;
   recipient: string;
+  country: string;
   amount_dollars: number;
+  currency: string;
+  rail: string;
+  fee_dollars: number;
   attempt: number;
   idempotency_key: string;
   verified: boolean;
@@ -79,6 +84,8 @@ export interface ScenePayload {
     runs: number;
     seed: number;
     currency: string;
+    country: string;
+    rail: string;
     generated_by: string;
   };
   palette: Record<string, string>;
@@ -116,7 +123,12 @@ export interface Verdict {
   action_id: string;
   verb: string;
   amount_cents: number;
+  amount_dollars: number;
   recipient: string;
+  country: string;
+  currency: string;
+  rail: string;
+  fee_dollars: number;
   verdict: 'allow' | 'require_approval' | 'deny';
   reason: string;
   rule: string;

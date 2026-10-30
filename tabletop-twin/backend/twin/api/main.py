@@ -9,6 +9,7 @@ money moves, and nothing is shared between accounts.
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +17,12 @@ from pydantic import BaseModel, Field
 
 from twin.domain.events import event_from_dict
 from twin.payments.machine import IllegalTransition, TERMINAL
-from twin.payments.paypal import PayPalConfig, PayPalTransport
+from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
 from twin.planner.model import providers_configured
 from twin.planner.tools import ToolError, parse_calls
+from twin.payments.rails import SANDBOX_RAIL, load_catalog
 from twin.store import Store
+from twin.world import reconcile
 from twin.world.heartbeat import advance, unwired
 from twin.world.memory import summarise
 from twin.world.scene import scene_payload
@@ -28,6 +31,7 @@ from twin.world.session import Session
 _cache: dict[str, Session] = {}
 _store: Store | None = None
 _demo: Session | None = None
+_reconciler: reconcile.ReconciliationLoop | None = None
 
 
 def store() -> Store:
@@ -39,8 +43,11 @@ def store() -> Store:
 
 def reset_state() -> None:
     """Drop every cached world. Tests and a restart both come through here."""
-    global _store, _demo
+    global _store, _demo, _reconciler
     _cache.clear()
+    if _reconciler is not None:
+        _reconciler.stop()
+        _reconciler = None
     if _store is not None:
         _store.close()
     _store = None
@@ -77,7 +84,20 @@ def world_of(user_id: str = Depends(current_user)) -> Session:
     return session_for(user_id)
 
 
-app = FastAPI(title="Tabletop Twin", version="0.2.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Background reconciliation is opt-in: it needs a transport that can answer a lookup."""
+    global _reconciler
+    _reconciler = reconcile.start(store())
+    try:
+        yield
+    finally:
+        if _reconciler is not None:
+            _reconciler.stop()
+            _reconciler = None
+
+
+app = FastAPI(title="Tabletop Twin", version="0.3.0", lifespan=lifespan)
 # The immersive client is served from the IWSDK dev server on its own port.
 _origins = [o for o in os.environ.get("TWIN_ALLOW_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o]
 app.add_middleware(
@@ -143,6 +163,8 @@ class EventIn(BaseModel):
     amount_cents: int = Field(ge=0, le=100_000_000)
     due_day: int = Field(ge=0, le=364)
     counterparty: str = Field(default="", max_length=120)
+    country: str = Field(default="", max_length=2, pattern="^[A-Za-z]{0,2}$")
+    currency: str = Field(default="", max_length=3, pattern="^[A-Za-z]{0,3}$")
     recurring_every_days: int | None = Field(default=None, ge=1, le=365)
     occurrences: int = Field(default=1, ge=1, le=104)
     late_fee_cents: int = Field(default=0, ge=0, le=10_000_000)
@@ -166,6 +188,10 @@ class CeilingIn(BaseModel):
 
 class OpeningIn(BaseModel):
     cents: int = Field(ge=-100_000_000, le=1_000_000_000)
+
+
+class RailIn(BaseModel):
+    rail: str = Field(min_length=1, max_length=32)
 
 
 # ------------------------------------------------------------------- accounts
@@ -220,8 +246,20 @@ def health() -> dict:
         "heartbeat_steps": [step.slug for step in s.persona.steps],
         "heartbeat_unwired": unwired(s),
         "paypal_configured": PayPalConfig.from_env() is not None,
+        "settlement_rail": s.rail,
+        "rails_compiled_on": load_catalog().compiled_on,
+        "reconciler": _reconciler.status() if _reconciler else {"running": False, "reason": reconciler_refusal()},
         "accounts": True,
     }
+
+
+def reconciler_refusal() -> str:
+    """Why nobody is sweeping overnight, said plainly instead of left blank."""
+    if reconcile.interval_sec() <= 0:
+        return "TWIN_RECONCILE_SEC is not set"
+    if PayPalConfig.from_env() is None:
+        return "settlement is on the sandbox fake, which forgets what it charged when it restarts"
+    return "the loop has not started yet"
 
 
 # ---------------------------------------------------------------------- world
@@ -319,7 +357,7 @@ def retry(body: ActionRef, s: Session = Depends(world_of)) -> dict:
 
 
 @app.post("/v1/reconcile")
-def reconcile(body: ActionRef, s: Session = Depends(world_of)) -> dict:
+def reconcile_payment(body: ActionRef, s: Session = Depends(world_of)) -> dict:
     try:
         result = s.reconcile(body.action_id)
     except KeyError as exc:
@@ -342,14 +380,54 @@ def blackout(body: ActionRef, s: Session = Depends(world_of)) -> dict:
     return {"action_id": body.action_id, "armed": True}
 
 
-@app.post("/v1/transport")
-def use_real_transport(s: Session = Depends(world_of)) -> dict:
-    """Swap the sandbox fake for the live PayPal client. Needs env credentials; refuses without them."""
-    config = PayPalConfig.from_env()
-    if config is None:
-        raise HTTPException(status_code=503, detail="PAYPAL_CLIENT_ID and PAYPAL_SECRET are not set")
-    s.transport = PayPalTransport(config)
-    return {"transport": "paypal", "environment": config.environment}
+@app.put("/v1/rail")
+def choose_rail(body: RailIn, s: Session = Depends(world_of)) -> dict:
+    """Point this world at the rail money leaves by.
+
+    A rail the deployment has no transport for is refused rather than pretended:
+    the twin can still quote its prices, because a quote is arithmetic.
+    """
+    rail = load_catalog().rails.get(body.rail)
+    if rail is None and body.rail != SANDBOX_RAIL:
+        raise HTTPException(status_code=404, detail=f"'{body.rail}' is not a rail this twin knows")
+    if rail is None:
+        s.set_rail(SANDBOX_RAIL, SandboxTransport())
+    elif rail.transport == "paypal":
+        config = PayPalConfig.from_env()
+        if config is None:
+            raise HTTPException(status_code=503, detail="PAYPAL_CLIENT_ID and PAYPAL_SECRET are not set")
+        s.set_rail(rail.name, PayPalTransport(config))
+    else:
+        raise HTTPException(
+            status_code=501,
+            detail=f"{rail.label} has no transport adapter here; the twin can price it but not settle on it",
+        )
+    s.persist()
+    return {"rail": s.rail, "transport": type(s.transport).__name__, **({"settlement_note": rail.settlement_note} if rail else {})}
+
+
+@app.get("/v1/rails")
+def rails(country: str = "", amount_cents: int = 0, s: Session = Depends(world_of)) -> dict:
+    """What this world's rails cost for one payment, and which of them cannot reach at all."""
+    catalog = load_catalog()
+    payload = {
+        "settles_on": s.rail,
+        "sender_country": s.ledger.country,
+        "sender_currency": s.ledger.currency,
+        "compiled_on": catalog.compiled_on,
+        "note": catalog.note,
+    }
+    if country:
+        payload["country"] = country.upper()
+        payload["reachable"] = catalog.reachable(country.upper(), s.ledger.country, s.ledger.currency)
+    if amount_cents > 0:
+        payload["quotes"] = catalog.quote(
+            amount_cents,
+            sender_country=s.ledger.country,
+            recipient_country=country.upper(),
+            sender_currency=s.ledger.currency,
+        )
+    return payload
 
 
 @app.put("/v1/limits/recipient")
@@ -373,6 +451,8 @@ def set_opening(body: OpeningIn, s: Session = Depends(world_of)) -> dict:
 def ledger(s: Session = Depends(world_of)) -> dict:
     return {
         "opening_balance_cents": s.ledger.opening_balance_cents,
+        "currency": s.ledger.currency,
+        "country": s.ledger.country,
         "events": [
             {
                 "id": e.id,
@@ -382,6 +462,8 @@ def ledger(s: Session = Depends(world_of)) -> dict:
                 "amount_cents": e.amount_cents,
                 "due_day": e.due_day,
                 "counterparty": e.counterparty,
+                "country": e.country,
+                "currency": e.currency,
                 "chasable": e.is_chasable(),
                 "cancellable": e.is_cancellable(),
             }
@@ -480,7 +562,11 @@ def payments(s: Session = Depends(world_of)) -> dict:
             {
                 "action_id": record.action_id,
                 "amount_cents": record.amount_cents,
+                "currency": record.currency,
+                "rail": record.rail,
+                "fee_cents": record.fee_cents,
                 "recipient": record.recipient,
+                "country": record.country,
                 "state": record.state.value,
                 "attempt": record.attempt,
                 "idempotency_key": record.idempotency_key,

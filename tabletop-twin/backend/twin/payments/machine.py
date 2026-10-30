@@ -78,6 +78,10 @@ class PaymentRecord:
     provider_ref: str | None = None
     history: list[tuple[float, str, str]] = field(default_factory=list)
     verified_outcome: str | None = None
+    currency: str = "USD"
+    rail: str = "sandbox"
+    country: str = ""
+    fee_cents: int = 0
 
     def __post_init__(self) -> None:
         if not self.idempotency_key:
@@ -97,8 +101,16 @@ class PaymentMachine:
         self.approval_floor_cents = approval_floor_cents
         self._by_key: dict[str, PaymentRecord] = {}
 
-    def open(self, action_id: str, amount_cents: int, recipient: str) -> PaymentRecord:
-        record = PaymentRecord(action_id=action_id, amount_cents=amount_cents, recipient=recipient)
+    def open(self, action_id: str, amount_cents: int, recipient: str, *, currency: str = "USD",
+             rail: str = "sandbox", country: str = "") -> PaymentRecord:
+        record = PaymentRecord(
+            action_id=action_id,
+            amount_cents=amount_cents,
+            recipient=recipient,
+            currency=currency,
+            rail=rail,
+            country=country,
+        )
         self._by_key[record.idempotency_key] = record
         return record
 
@@ -138,7 +150,9 @@ class PaymentMachine:
     def submit(self, record: PaymentRecord, transport) -> PaymentRecord:
         record = self._move(record, PaymentState.SUBMITTED, f"key={record.idempotency_key}")
         try:
-            result = transport.charge(record.idempotency_key, record.amount_cents, record.recipient)
+            result = transport.charge(
+                record.idempotency_key, record.amount_cents, record.recipient, currency=record.currency
+            )
         except MoneyNotMoved as exc:
             return self._move(record, PaymentState.FAILED, f"refused before any charge: {exc}")
         except AmbiguousResult as exc:

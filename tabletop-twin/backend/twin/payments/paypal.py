@@ -20,6 +20,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from twin.payments.machine import AmbiguousResult, MoneyNotMoved
+from twin.payments.rails import load_catalog
 
 
 @dataclass(frozen=True)
@@ -37,8 +38,13 @@ class ProviderNotFound(MoneyNotMoved):
     """The provider says it has no record of that attempt — a real answer to a lookup."""
 
 
-def to_amount(amount_cents: int) -> str:
-    return f"{amount_cents // 100}.{amount_cents % 100:02d}"
+def to_amount(amount_cents: int, currency: str = "USD") -> str:
+    """Minor units in the shape a v2 body wants: '12.34', '150', '1.234'.
+
+    Sending two decimals for a zero-decimal currency is the classic way to get an
+    order rejected, so the exponent comes from the catalog, not from here.
+    """
+    return load_catalog().amount_string(amount_cents, currency)
 
 
 _STATUS_MAP = {
@@ -85,14 +91,20 @@ class PayPalConfig:
 
 
 class PayPalTransport:
-    """Orders v2 with PayPal-Request-Id set to our idempotency key."""
+    """Orders v2 with PayPal-Request-Id set to our idempotency key.
+
+    The order is always raised in the ledger's own currency. Nothing here
+    converts: a spread cost is estimated by the rail catalog, and the provider's
+    own rate is what actually moves the money.
+    """
 
     def __init__(self, config: PayPalConfig, opener=urllib.request.urlopen) -> None:
         self.config = config
         self._opener = opener
         self._token: tuple[str, float] | None = None
 
-    def charge(self, idempotency_key: str, amount_cents: int, recipient: str) -> ProviderResult:
+    def charge(self, idempotency_key: str, amount_cents: int, recipient: str,
+               currency: str = "USD") -> ProviderResult:
         order = self._post(
             "/v2/checkout/orders",
             {
@@ -101,7 +113,7 @@ class PayPalTransport:
                     {
                         "reference_id": recipient or "tabletop-twin",
                         "custom_id": idempotency_key,
-                        "amount": {"currency_code": "USD", "value": to_amount(amount_cents)},
+                        "amount": {"currency_code": currency, "value": to_amount(amount_cents, currency)},
                     }
                 ],
             },
@@ -210,7 +222,8 @@ class SandboxTransport:
         self.charge_calls = 0
         self.lookup_calls = 0
 
-    def charge(self, idempotency_key: str, amount_cents: int, recipient: str) -> ProviderResult:
+    def charge(self, idempotency_key: str, amount_cents: int, recipient: str,
+               currency: str = "USD") -> ProviderResult:
         self.charge_calls += 1
         if recipient in self.decline_recipients:
             result = ProviderResult(status="denied", reference=None)

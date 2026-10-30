@@ -67,6 +67,9 @@ def test_health_says_which_planner_answered(client, monkeypatch):
     body = client.get("/v1/health").json()
     assert body["ok"] and body["planner"] in {"rules", "model"}
     assert body["paypal_configured"] is False
+    assert body["settlement_rail"] == "sandbox"
+    assert body["reconciler"]["running"] is False
+    assert "TWIN_RECONCILE_SEC" in body["reconciler"]["reason"]
     assert len(body["heartbeat_steps"]) == 6
     assert body["heartbeat_unwired"] == []
     # Which endpoints exist is reported by name; the keys themselves never leave the env.
@@ -99,6 +102,17 @@ def test_ask_returns_words_and_the_numbers_behind_them(client, headers):
 
 def test_an_empty_intent_is_not_forwarded_to_the_world(client, headers):
     assert client.post("/v1/ask", headers=headers, json={"intent": ""}).status_code == 422
+
+
+def test_asking_about_a_rail_answers_with_prices(client, headers):
+    answer = client.post(
+        "/v1/ask", headers=headers, json={"intent": "which rail do I use for the print club box?"}
+    ).json()
+    assert "quote_rails" in answer["calls"]
+    quote = next(result for result in answer["results"] if "quotes" in result)
+    assert quote["country"] == "PK"
+    assert [row["rail"] for row in quote["quotes"]][-1] == "paypal"
+    assert answer["said"]
 
 
 def test_a_pipe_is_pullable_and_a_bill_is_not(client, headers):
@@ -173,7 +187,54 @@ def test_an_unknown_action_has_nothing_to_approve(client, headers):
 def test_live_paypal_refuses_to_be_selected_without_credentials(client, headers, monkeypatch):
     monkeypatch.delenv("PAYPAL_CLIENT_ID", raising=False)
     monkeypatch.delenv("PAYPAL_SECRET", raising=False)
-    assert client.post("/v1/transport", headers=headers).status_code == 503
+    assert client.put("/v1/rail", headers=headers, json={"rail": "paypal"}).status_code == 503
+
+
+def test_a_rail_with_no_adapter_here_is_refused_not_simulated(client, headers):
+    response = client.put("/v1/rail", headers=headers, json={"rail": "local_transfer"})
+    assert response.status_code == 501
+    assert "adapter" in response.json()["detail"]
+
+
+def test_an_unknown_rail_name_is_not_a_rail(client, headers):
+    assert client.put("/v1/rail", headers=headers, json={"rail": "carrier_pigeon"}).status_code == 404
+
+
+def test_an_open_payment_records_which_rail_was_asked_to_carry_it(client, headers):
+    client.post("/v1/tools", headers=headers, json={
+        "calls": [{"name": "propose_action", "args": {"verb": "pay_bill", "event_id": "sub-scan"}}]})
+    record = next(r for r in client.get("/v1/payments", headers=headers).json()["records"]
+                  if r["recipient"] == "Highres Club")
+    assert record["country"] == "DE"
+    assert record["currency"] == "USD" and record["rail"] == "sandbox"
+    assert record["fee_cents"] == 0
+
+
+def test_the_rail_question_is_answered_with_prices_and_a_border(client, headers):
+    body = client.get("/v1/rails?country=PK&amount_cents=10000", headers=headers).json()
+    assert body["settles_on"] == "sandbox"
+    assert body["sender_country"] == "US" and body["sender_currency"] == "USD"
+    assert "paypal" not in body["reachable"]
+    assert "card_gateway" in body["reachable"]
+    excluded = {row["rail"]: row["excluded"] for row in body["quotes"]}
+    assert "no PayPal service" in excluded["paypal"]
+    assert excluded["card_gateway"] is None
+
+
+def test_a_rail_list_without_an_amount_prices_nothing(client, headers):
+    body = client.get("/v1/rails", headers=headers).json()
+    assert body["compiled_on"] and body["note"]
+    assert "quotes" not in body and "country" not in body
+
+
+def test_a_world_can_be_pointed_back_at_the_fake(client, headers, monkeypatch):
+    monkeypatch.delenv("PAYPAL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PAYPAL_SECRET", raising=False)
+    assert client.put("/v1/rail", headers=headers, json={"rail": "paypal"}).status_code == 503
+    response = client.put("/v1/rail", headers=headers, json={"rail": "sandbox"})
+    assert response.status_code == 200
+    assert response.json()["rail"] == "sandbox"
+    assert client.get("/v1/world", headers=headers).json()["meta"]["rail"] == "sandbox"
 
 
 def test_tick_returns_captions_for_the_accessibility_track(client, headers):
@@ -205,6 +266,24 @@ def test_a_wrong_connection_key_is_not_a_way_in(client, headers):
     conn = client.post("/v1/connections", headers=headers, json={"name": "ledger-sync"}).json()
     event = {"id": "x", "label": "X", "kind": "bill", "direction": "out", "amount_cents": 1, "due_day": 1}
     assert client.post("/v1/ingest", json={"connection_id": conn["connection_id"], "key": "guess", "event": event}).status_code == 401
+
+
+def test_an_ingested_event_keeps_the_geography_it_arrived_with(client, headers):
+    conn = client.post("/v1/connections", headers=headers, json={"name": "ledger-sync"}).json()
+    event = {"id": "bill-hosting", "label": "Berlin hosting", "kind": "bill", "direction": "out",
+             "amount_cents": 4_200, "due_day": 12, "counterparty": "Cumulus GmbH", "country": "de"}
+    client.post("/v1/ingest", json={"connection_id": conn["connection_id"], "key": conn["key"], "event": event})
+    stored = next(e for e in client.get("/v1/ledger", headers=headers).json()["events"] if e["id"] == "bill-hosting")
+    assert stored["country"] == "DE"
+    stone = next(s for s in client.get("/v1/world", headers=headers).json()["stones"] if s["event_id"] == "bill-hosting")
+    assert stone["country"] == "DE"
+
+
+def test_a_country_code_that_is_not_a_country_is_refused_at_the_edge(client, headers):
+    reply = client.post("/v1/ledger/events", headers=headers, json={
+        "id": "bill-lost", "label": "Somewhere", "kind": "bill", "direction": "out",
+        "amount_cents": 1, "due_day": 1, "country": "deutschland"})
+    assert reply.status_code == 422
 
 
 def test_the_world_comes_back_after_a_restart(client, headers):

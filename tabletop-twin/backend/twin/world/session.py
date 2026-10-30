@@ -25,7 +25,8 @@ from twin.payments.machine import (
     PaymentRecord,
     PaymentState,
 )
-from twin.payments.paypal import SandboxTransport
+from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
+from twin.payments.rails import SANDBOX_RAIL, Rail, load_catalog
 from twin.persona.persona import Persona, load_persona
 from twin.planner.model import ModelPlanner
 from twin.planner.rules import RulePlanner
@@ -42,7 +43,29 @@ CHARGE_VERBS = frozenset({"pay_bill", "start_subscription", "shift_payment"})
 
 
 def dollars(cents: int) -> float:
+    """Minor units as a number the client can print.
+
+    Every money field in the payload is called "dollars" even when the ledger is
+    denominated in yen: the shape of the scene does not change with the currency,
+    and `meta.currency` says what the numbers are actually in.
+    """
     return round(cents / 100, 2)
+
+
+def transport_for(rail_name: str):
+    """The transport that can walk this rail, or None if this deployment cannot.
+
+    A rail is a promise about how money leaves. Without the credentials behind it
+    the honest answer is that nothing settles here, so the caller is told to fall
+    back rather than being handed a fake that matches the name.
+    """
+    rail = load_catalog().rails.get(rail_name)
+    if rail is None:
+        return SandboxTransport()
+    if rail.transport == "paypal":
+        config = PayPalConfig.from_env()
+        return None if config is None else PayPalTransport(config)
+    return None
 
 
 @dataclass
@@ -65,6 +88,7 @@ class Session:
     runs: int = DEFAULT_RUNS
     day: int = 0
     transport: SandboxTransport = field(default_factory=SandboxTransport)
+    rail: str = SANDBOX_RAIL
     machine: PaymentMachine = field(default_factory=lambda: PaymentMachine(approval_floor_cents=5_000))
     calibration: Calibration = field(default_factory=Calibration)
     window: SpendWindow = field(default_factory=SpendWindow)
@@ -100,7 +124,10 @@ class Session:
         row = store.world_row(user_id)
         if row is None:
             raise KeyError("that account has no world yet")
-        ledger = store.ledger_for(user_id, row["persona_id"], int(row["opening_balance_cents"]))
+        ledger = store.ledger_for(
+            user_id, row["persona_id"], int(row["opening_balance_cents"]),
+            currency=row.get("currency") or "USD", country=row.get("country") or "",
+        )
         policy = store.policy_for(user_id, ledger)
         persona = load_persona(persona_id=ledger.persona_id)
         planner: RulePlanner | ModelPlanner = ModelPlanner.from_env() or RulePlanner()
@@ -111,6 +138,17 @@ class Session:
         session.day = int(row["day"])
         session.horizon_days = int(row["horizon_days"])
         session.runs = int(row["runs"])
+        rail = row.get("rail") or SANDBOX_RAIL
+        transport = transport_for(rail)
+        if transport is None:
+            session.record(
+                "rail_reverted",
+                {"from": rail, "to": SANDBOX_RAIL, "because": "no transport for that rail in this deployment"},
+            )
+            rail = SANDBOX_RAIL
+            transport = SandboxTransport()
+        session.rail = rail
+        session.transport = transport
         session.focus = row["focus"]
         session.last_speech = row["last_speech"]
         session.tested_on_day = int(row["tested_on_day"])
@@ -142,6 +180,10 @@ class Session:
                 provider_ref=row["provider_ref"],
                 history=[tuple(entry) for entry in json.loads(row["history_json"])],
                 verified_outcome=row["verified_outcome"],
+                currency=row.get("currency") or "USD",
+                rail=row.get("rail") or SANDBOX_RAIL,
+                country=row.get("country") or "",
+                fee_cents=int(row.get("fee_cents") or 0),
             )
             self.machine.adopt(record)
             action = Action(
@@ -150,6 +192,8 @@ class Session:
                 amount_cents=record.amount_cents,
                 recipient=record.recipient,
                 direction=row["direction"],
+                country=record.country,
+                currency=record.currency,
             )
             self.actions[record.action_id] = action
             if record.state not in TERMINAL:
@@ -193,6 +237,7 @@ class Session:
             day=self.day,
             horizon_days=self.horizon_days,
             runs=self.runs,
+            rail=self.rail,
             focus=self.focus,
             last_speech=self.last_speech,
             tested_on_day=self.tested_on_day,
@@ -354,7 +399,10 @@ class Session:
         event = self.ledger.by_id(event_id) if event_id else None
         amount = int(amount_cents or (event.amount_cents if event else 0))
         who = recipient or (event.counterparty if event else "")
+        country = (event.country if event else "") or self._country_of(who)
+        currency = self.ledger.currency
         is_charge = verb in CHARGE_VERBS
+        rail = self.active_rail() if is_charge else None
         action = Action(
             id=f"act-{uuid.uuid4().hex[:8]}",
             verb=verb,
@@ -362,20 +410,40 @@ class Session:
             recipient=who,
             justification=justification,
             direction=("in" if event and event.direction is Direction.IN else "out") if is_charge else "none",
+            country=country,
+            currency=currency,
         )
-        decision = evaluate(action, self.policy, self.window, self.day)
+        decision = evaluate(
+            action, self.policy, self.window, self.day, rail=rail, sender_country=self.ledger.country
+        )
+        fee = self._fee_estimate(rail, amount, country, event)
+        reason = decision.reason
+        if decision.rule == "rail_unavailable":
+            alternatives = [
+                name
+                for name in load_catalog().reachable(country, self.ledger.country, currency)
+                if name != self.rail
+            ]
+            reason = f"{reason}. Rails that could reach it here: {', '.join(alternatives) or 'none the twin knows'}"
         self.record(
             "policy",
             {"tool": "propose_action", "verb": verb, "verdict": decision.verdict.value, "rule": decision.rule,
-             "amount_cents": amount, "recipient": who},
+             "amount_cents": amount, "recipient": who, "country": country, "currency": currency,
+             "rail": self.rail, "fee_cents": fee, "reason": reason},
         )
         payload = {
             "action_id": action.id,
             "verb": verb,
             "amount_cents": amount,
+            "amount_dollars": dollars(amount),
             "recipient": who,
+            "country": country,
+            "currency": currency,
+            "rail": self.rail,
+            "fee_cents": fee,
+            "fee_dollars": dollars(fee),
             "verdict": decision.verdict.value,
-            "reason": decision.reason,
+            "reason": reason,
             "rule": decision.rule,
             "state": None,
             "idempotency_key": None,
@@ -386,12 +454,13 @@ class Session:
             # A refused verb is not even simulated: the twin does not get to rehearse a
             # thing it is not allowed to do.
             if decision.verdict.value == "deny":
-                payload["blocked"] = decision.reason
+                payload["blocked"] = reason
             else:
                 payload["effect"] = self._fork_for(verb, event)
             return payload
 
-        record = self.machine.open(action.id, amount, who)
+        record = self.machine.open(action.id, amount, who, currency=currency, rail=self.rail, country=country)
+        record.fee_cents = fee
         self.machine.propose(record)
         payload["state"] = record.state.value
         payload["idempotency_key"] = record.idempotency_key
@@ -579,6 +648,79 @@ class Session:
             self.store.set_recipient_ceiling(self.user_id, recipient, cents)
         self.record("ceiling_set", {"recipient": recipient, "cents": cents})
         return {"recipient": recipient, "ceiling_cents": cents}
+
+    # --------------------------------------------------------------- settlement
+
+    def active_rail(self) -> Rail | None:
+        """The rail money leaves by, or None while the transport is the sandbox fake."""
+        return load_catalog().rails.get(self.rail)
+
+    def set_rail(self, name: str, transport=None) -> dict:
+        """Choose the rail by which this world pays out, and the transport that walks it.
+
+        Both move together: a world that claims to settle on PayPal while holding a
+        sandbox fake would be describing a settlement path it does not have.
+        """
+        catalog = load_catalog()
+        if name != SANDBOX_RAIL and name not in catalog.rails:
+            raise ValueError(f"'{name}' is not a rail this twin knows")
+        self.rail = name
+        if transport is not None:
+            self.transport = transport
+        rail = catalog.rails.get(name)
+        self.record("rail_set", {"rail": name, "label": rail.label if rail else name})
+        return {
+            "rail": name,
+            "label": rail.label if rail else "sandbox fake",
+            "settlement_note": rail.settlement_note if rail else "Nothing leaves this machine.",
+        }
+
+    def _country_of(self, recipient: str) -> str:
+        for event in self.ledger.events:
+            if event.counterparty == recipient and event.country:
+                return event.country
+        return ""
+
+    def _fee_estimate(self, rail: Rail | None, amount_cents: int, country: str,
+                      event: CashEvent | None) -> int:
+        """What the chosen rail charges to move this, derived from the catalog's rates."""
+        if rail is None or not amount_cents:
+            return 0
+        return rail.fee_cents(
+            amount_cents,
+            sender_country=self.ledger.country,
+            recipient_country=country,
+            sender_currency=self.ledger.currency,
+            recipient_currency=event.currency if event else "",
+        )
+
+    def tool_quote_rails(self, event_id: str | None = None, recipient: str = "",
+                         amount_cents: int | None = None) -> dict:
+        """Every rail, cheapest first, with the reason any of them cannot deliver this."""
+        event = self.ledger.by_id(event_id) if event_id else None
+        who = recipient or (event.counterparty if event else "")
+        country = (event.country if event else "") or self._country_of(who)
+        amount = int(amount_cents or (event.amount_cents if event else 0))
+        if not amount:
+            return {"skipped": "quote_rails names neither a ledger event nor an amount"}
+        quotes = load_catalog().quote(
+            amount,
+            sender_country=self.ledger.country,
+            recipient_country=country,
+            sender_currency=self.ledger.currency,
+            recipient_currency=event.currency if event else "",
+        )
+        best = next((row for row in quotes if not row["excluded"]), None)
+        self.record("rails_quoted", {"recipient": who, "country": country, "amount_cents": amount,
+                                     "settles_on": self.rail, "cheapest": best["rail"] if best else None})
+        return {
+            "recipient": who,
+            "country": country,
+            "amount_cents": amount,
+            "amount_dollars": dollars(amount),
+            "settles_on": self.rail,
+            "quotes": quotes,
+        }
 
 
 def _slug(text: str) -> str:

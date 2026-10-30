@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS world (
   horizon_days INTEGER NOT NULL,
   runs INTEGER NOT NULL,
   opening_balance_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  country TEXT NOT NULL DEFAULT '',
+  rail TEXT NOT NULL DEFAULT 'sandbox',
   policy_json TEXT NOT NULL,
   focus TEXT NOT NULL DEFAULT '',
   last_speech TEXT NOT NULL DEFAULT '',
@@ -63,6 +66,8 @@ CREATE TABLE IF NOT EXISTS cash_event (
   amount_cents INTEGER NOT NULL,
   due_day INTEGER NOT NULL,
   counterparty TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  currency TEXT NOT NULL DEFAULT '',
   recurring_every_days INTEGER,
   occurrences INTEGER NOT NULL DEFAULT 1,
   late_fee_cents INTEGER NOT NULL DEFAULT 0,
@@ -99,7 +104,11 @@ CREATE TABLE IF NOT EXISTS payment (
   verb TEXT NOT NULL DEFAULT 'pay_bill',
   direction TEXT NOT NULL DEFAULT 'out',
   amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  rail TEXT NOT NULL DEFAULT 'sandbox',
+  fee_cents INTEGER NOT NULL DEFAULT 0,
   recipient TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
   state TEXT NOT NULL,
   attempt INTEGER NOT NULL DEFAULT 0,
   provider_ref TEXT,
@@ -151,6 +160,31 @@ class Store:
         self._lock = threading.Lock()
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Give a database written before these columns existed the columns it lacks.
+
+        SQLite cannot diff a schema, so each added column is declared once here.
+        """
+        wanted = {
+            "world": {"currency": "TEXT NOT NULL DEFAULT 'USD'", "country": "TEXT NOT NULL DEFAULT ''",
+                      "rail": "TEXT NOT NULL DEFAULT 'sandbox'"},
+            "cash_event": {"country": "TEXT NOT NULL DEFAULT ''", "currency": "TEXT NOT NULL DEFAULT ''"},
+            "payment": {
+                "currency": "TEXT NOT NULL DEFAULT 'USD'",
+                "rail": "TEXT NOT NULL DEFAULT 'sandbox'",
+                "fee_cents": "INTEGER NOT NULL DEFAULT 0",
+                "country": "TEXT NOT NULL DEFAULT ''",
+            },
+        }
+        with self._lock:
+            for table, columns in wanted.items():
+                have = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+                for name, declaration in columns.items():
+                    if name not in have:
+                        self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+            self._conn.commit()
 
     def close(self) -> None:
         with self._lock:
@@ -230,10 +264,10 @@ class Store:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO world (user_id, persona_id, day, horizon_days, runs, opening_balance_cents,"
-                " policy_json, focus, last_speech, tested_on_day, updated_at)"
-                " VALUES (?,?,0,90,2000,?,?, '', '', -1, ?)",
-                (user_id, ledger.persona_id, ledger.opening_balance_cents,
-                 json.dumps(_policy_to_dict(policy)), now),
+                " currency, country, policy_json, focus, last_speech, tested_on_day, updated_at)"
+                " VALUES (?,?,0,90,2000,?,?,?,?, '', '', -1, ?)",
+                (user_id, ledger.persona_id, ledger.opening_balance_cents, ledger.currency,
+                 ledger.country, json.dumps(_policy_to_dict(policy)), now),
             )
             for event in ledger.events:
                 self._insert_event(user_id, event, source="seed")
@@ -252,13 +286,13 @@ class Store:
             policy = replace(policy, allowed_recipients=frozenset(allowed))
         return policy
 
-    def save_world(self, user_id: str, *, day: int, horizon_days: int, runs: int, focus: str,
-                   last_speech: str, tested_on_day: int) -> None:
+    def save_world(self, user_id: str, *, day: int, horizon_days: int, runs: int, rail: str = "sandbox",
+                   focus: str, last_speech: str, tested_on_day: int) -> None:
         with self._lock:
             self._conn.execute(
-                "UPDATE world SET day=?, horizon_days=?, runs=?, focus=?, last_speech=?, tested_on_day=?,"
+                "UPDATE world SET day=?, horizon_days=?, runs=?, rail=?, focus=?, last_speech=?, tested_on_day=?,"
                 " updated_at=? WHERE user_id=?",
-                (day, horizon_days, runs, focus, last_speech, tested_on_day, time.time(), user_id),
+                (day, horizon_days, runs, rail, focus, last_speech, tested_on_day, time.time(), user_id),
             )
             self._conn.commit()
 
@@ -295,14 +329,16 @@ class Store:
     def _insert_event(self, user_id: str, event: CashEvent, source: str) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO cash_event (user_id, id, label, kind, direction, amount_cents, due_day,"
-            " counterparty, recurring_every_days, occurrences, late_fee_cents, lateness_json, source)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " counterparty, country, currency, recurring_every_days, occurrences, late_fee_cents,"
+            " lateness_json, source)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (user_id, event.id, event.label, event.kind.value, event.direction.value, event.amount_cents,
-             event.due_day, event.counterparty, event.recurring_every_days, event.occurrences,
-             event.late_fee_cents, json.dumps(list(event.lateness_days)), source),
+             event.due_day, event.counterparty, event.country, event.currency, event.recurring_every_days,
+             event.occurrences, event.late_fee_cents, json.dumps(list(event.lateness_days)), source),
         )
 
-    def ledger_for(self, user_id: str, persona_id: str, opening_balance_cents: int) -> Ledger:
+    def ledger_for(self, user_id: str, persona_id: str, opening_balance_cents: int,
+                   currency: str = "USD", country: str = "") -> Ledger:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM cash_event WHERE user_id = ? ORDER BY due_day, id", (user_id,)
@@ -316,6 +352,8 @@ class Store:
                 amount_cents=int(row["amount_cents"]),
                 due_day=int(row["due_day"]),
                 counterparty=row["counterparty"],
+                country=row["country"],
+                currency=row["currency"],
                 recurring_every_days=row["recurring_every_days"],
                 occurrences=int(row["occurrences"]),
                 late_fee_cents=int(row["late_fee_cents"]),
@@ -323,7 +361,13 @@ class Store:
             )
             for row in rows
         ]
-        return Ledger(opening_balance_cents=opening_balance_cents, events=tuple(events), persona_id=persona_id)
+        return Ledger(
+            opening_balance_cents=opening_balance_cents,
+            events=tuple(events),
+            persona_id=persona_id,
+            currency=currency or "USD",
+            country=country,
+        )
 
     def put_event(self, user_id: str, event: CashEvent, source: str) -> None:
         with self._lock:
@@ -406,10 +450,12 @@ class Store:
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO payment (user_id, idempotency_key, action_id, verb, direction,"
-                " amount_cents, recipient, state, attempt, provider_ref, verified_outcome, settled_day,"
-                " history_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " amount_cents, currency, rail, fee_cents, recipient, country, state, attempt, provider_ref,"
+                " verified_outcome, settled_day, history_json)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (user_id, record.idempotency_key, record.action_id, verb, direction, record.amount_cents,
-                 record.recipient, record.state.value, record.attempt, record.provider_ref,
+                 record.currency, record.rail, record.fee_cents, record.recipient, record.country,
+                 record.state.value, record.attempt, record.provider_ref,
                  record.verified_outcome, settled_day, json.dumps(record.history)),
             )
             self._conn.commit()
@@ -418,6 +464,15 @@ class Store:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM payment WHERE user_id = ? ORDER BY attempt, idempotency_key", (user_id,)
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def payments_in_state(self, state: str) -> list[dict]:
+        """One state's records across every account: the reconciler's worklist."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM payment WHERE state = ? ORDER BY user_id, action_id, attempt",
+                (state,),
             ).fetchall()
         return [dict(row) for row in rows]
 

@@ -59,6 +59,34 @@ business effect is seen. Until then the twin says so in the daily heartbeat — 
 taken, outcome not observed — rather than marking the job done. The garden stays a
 forecast score: only resolved predictions grow it.
 
+## Who this twin can actually pay
+
+A big share of the world cannot receive PayPal at all, and more can only send. So the
+twin keeps a dated, editable catalog of which settlement route reaches which country,
+what it charges, and how long it takes — and it treats that as a first-class answer
+rather than an afterthought. Ask "how should I pay this?" and it quotes every route it
+knows, cheapest first, and says plainly which ones cannot deliver and why.
+
+Three rules keep that honest:
+
+- **Geography is checked before money.** A payment the chosen route can never arrive
+  is refused on that ground alone, and the refusal names the routes that could reach
+  it. Somebody in a country the provider has left is told the truth instead of
+  watching a charge fail at 3 a.m.
+- **An unchecked map refuses nothing.** A route only blocks a country whose coverage
+  was actually verified. A guessed refusal is worse than an honest decline, because a
+  decline is something the payment machine can reason about and a lying policy is not.
+- **Nothing is converted.** An amount stays in the currency of the ledger it came
+  from and is written in that currency's own minor units. There is no exchange-rate
+  source in this project, so a currency the route must handle appears only as part of
+  its fee, never as a made-up number.
+
+A route is only selectable when the deployment really has a transport for it. Two of
+the catalog's routes are quoted but not wired here, and the service says so rather
+than pretending. On top of that, reconciliation now runs in the background on a
+timer, so a payment whose answer never arrived is chased overnight even when nobody
+has the table open — and it still does not claim the paid-for thing arrived.
+
 ## Whose table this is
 
 Anyone can open a world. An account is created with an email and a password, and a
@@ -109,7 +137,9 @@ credentials, never values checked into this repository: `LLM_API_KEY`,
 still answers and says which route it took. With no PayPal credentials it settles
 against a deterministic sandbox transport; the real transport has to be asked for
 explicitly and refuses to start without its credentials. `TWIN_DB_PATH` moves the
-store and `TWIN_ALLOW_ORIGINS` says which client origins may call it.
+store, `TWIN_ALLOW_ORIGINS` says which client origins may call it, and
+`TWIN_RECONCILE_SEC` — off by default — turns on the background sweep of payments
+that are still waiting for an answer.
 
 A headset has no keyboard, so the client signs itself in: the first visit opens its
 own account and keeps it. To put a table on an account you already have, open the
@@ -117,17 +147,22 @@ app once with `?email=...&password=...` and it joins that world from then on.
 
 ## Verification status
 
-The service is covered by 118 tests that run the forecast, the forks, the policy
-engine, the payment state machine, the accounts, the audit trail and the real PayPal
-transport against a gateway that answers on a socket.
+The service is covered by 208 tests that run the forecast, the forks, the policy
+engine, the payment state machine, the settlement catalog, the accounts, the audit
+trail and the real PayPal transport against a gateway that answers on a socket.
 
 The client typechecks and builds, and its scene document validates against the SDK's
 own schema and component catalog, so every asset id, component and field the code
-names is real. Its new paths were then run in a real browser against the dev server:
-an account is provisioned before the first fetch, every request after it carries a
-bearer token, an anonymous request is refused, a pipe pulled with a pointer forks a
-second world, and a payment left in **unknown** is reconciled by the client on the
-next heartbeat without being asked.
+names is real. Its account paths were then run in a real browser against the dev
+server: an account is provisioned before the first fetch, every request after it
+carries a bearer token, an anonymous request is refused, a pipe pulled with a pointer
+forks a second world, and a payment left in **unknown** is reconciled by the client on
+the next heartbeat without being asked.
+
+The settlement-rail, currency and background-reconciliation work added in this round
+is covered by the service tests and by the client typecheck and build. It was not
+driven in a browser or an XR session on this machine, so nothing about how those
+panels look or feel on the table should be read as tested.
 
 Live immersive evidence was **not** captured on this machine: the managed XR browser
 would not start alongside the browser already running here, so no claim about headset

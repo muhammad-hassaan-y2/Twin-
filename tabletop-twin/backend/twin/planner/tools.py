@@ -1,6 +1,6 @@
 """The tool surface the twin may reach for.
 
-A model's entire power here is choosing one of these four names and filling in
+A model's entire power here is choosing one of these five names and filling in
 arguments that this module then validates. It cannot compute, cannot spend, and
 cannot widen a limit, because none of those are expressible as a tool.
 """
@@ -113,7 +113,20 @@ PROPOSE_ACTION = Tool(
     required_args=("verb",),
 )
 
-REGISTRY: dict[str, Tool] = {t.name: t for t in (FORECAST, FORK, HIGHLIGHT, PROPOSE_ACTION)}
+QUOTE_RAILS = Tool(
+    name="quote_rails",
+    description="Price every settlement rail for one payment and report which of them can reach that country at all.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "event_id": {"type": "string"},
+            "recipient": {"type": "string"},
+            "amount_cents": {"type": "integer", "minimum": 1},
+        },
+    },
+)
+
+REGISTRY: dict[str, Tool] = {t.name: t for t in (FORECAST, FORK, HIGHLIGHT, PROPOSE_ACTION, QUOTE_RAILS)}
 
 
 def parse_calls(raw: Iterable[dict]) -> list[ToolCall]:

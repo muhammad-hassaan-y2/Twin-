@@ -3,6 +3,7 @@
   "display_name": "Juno Reyes",
   "note": "Entirely fictional. One freelance illustrator, one domain, one 90-day horizon.",
   "currency": "USD",
+  "country": "US",
   "opening_balance_cents": 214500,
   "events": [
     {
@@ -112,7 +113,8 @@
       "due_day": 9,
       "recurring_every_days": 30,
       "occurrences": 3,
-      "counterparty": "Highres Club"
+      "counterparty": "Highres Club",
+      "country": "DE"
     },
     {
       "id": "sub-plates",
@@ -123,7 +125,8 @@
       "due_day": 15,
       "recurring_every_days": 30,
       "occurrences": 3,
-      "counterparty": "Plate & Press"
+      "counterparty": "Plate & Press",
+      "country": "PK"
     },
     {
       "id": "bill-materials",
@@ -134,7 +137,8 @@
       "due_day": 17,
       "recurring_every_days": 30,
       "occurrences": 3,
-      "counterparty": "Ashgrove Paper"
+      "counterparty": "Ashgrove Paper",
+      "country": "GB"
     },
     {
       "id": "bill-insurance",

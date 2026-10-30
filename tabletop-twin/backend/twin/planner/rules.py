@@ -13,7 +13,7 @@ from .tools import ToolCall
 
 
 class RulePlanner:
-    """Deterministic intent routing over the same four tools."""
+    """Deterministic intent routing over the same five tools."""
 
     name = "rules"
 
@@ -23,6 +23,9 @@ class RulePlanner:
     _DRY = re.compile(r"\b(run out|dry|shortfall|broke|empty|low)\b", re.I)
     _COMPARE = re.compile(r"\b(what if|would|compare|instead|better|fork|branch)\b", re.I)
     _SHOW = re.compile(r"\b(show|look|point|highlight|where)\b", re.I)
+    _RAILS = re.compile(
+        r"\b(rail|paypal|wise|wire|bank transfer|cross[- ]border|currency|settle|which way)\b", re.I
+    )
 
     def plan(self, intent: str, context: dict) -> list[ToolCall]:
         text = (intent or "").strip()
@@ -31,6 +34,7 @@ class RulePlanner:
 
         cancellable = [e for e in context.get("cancellable", ()) if _matches(e, text)]
         chasable = [e for e in context.get("chasable", ()) if _matches(e, text)]
+        named = [e for e in context.get("events", ()) if _matches(e, text)]
 
         if self._CANCEL.search(text) and cancellable:
             calls.append(
@@ -62,6 +66,9 @@ class RulePlanner:
                     "the user is weighing a change",
                 )
             )
+        if self._RAILS.search(text):
+            args = {"event_id": named[0]["id"]} if named else {}
+            calls.append(ToolCall("quote_rails", args, "the user asked how this payment should be moved"))
         if len(calls) == 1:
             calls.append(
                 ToolCall("highlight", {"target": "driest"}, "nothing specific was asked, so show the pinch")
@@ -70,6 +77,18 @@ class RulePlanner:
 
     def narrate(self, intent: str, results: list[dict], context: dict | None = None) -> str:
         """Plain-language readout assembled from computed facts only."""
+        quoted = next((result for result in results if "quotes" in result), None)
+        if quoted:
+            options = [row for row in quoted["quotes"] if not row["excluded"]]
+            where = quoted["country"] or "that recipient"
+            if not options:
+                return f"None of my rails can reach {where}. Wire one that serves it and ask again."
+            cheapest = options[0]
+            return (
+                f"{cheapest['label']} is the cheapest of the rails I have for {where}: "
+                f"{cheapest['fee_dollars']} to move {quoted['amount_dollars']}. "
+                f"I am currently settling on {quoted['settles_on']}."
+            )
         for result in results:
             if "delta" in result:
                 d = result["delta"]

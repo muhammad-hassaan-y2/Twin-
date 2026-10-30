@@ -70,8 +70,8 @@ def tool_reply(name: str, args: dict) -> dict:
     return {"choices": [{"message": {"tool_calls": [{"id": "1", "function": {"name": name, "arguments": json.dumps(args)}}]}}]}
 
 
-def test_registry_is_exactly_the_four_tools_the_brief_named():
-    assert set(REGISTRY) == {"forecast", "fork", "highlight", "propose_action"}
+def test_registry_is_exactly_the_five_tools_the_brief_named():
+    assert set(REGISTRY) == {"forecast", "fork", "highlight", "propose_action", "quote_rails"}
 
 
 def test_a_tool_the_twin_does_not_have_is_rejected():

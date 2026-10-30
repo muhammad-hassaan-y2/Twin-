@@ -1,14 +1,18 @@
 """The policy engine. Spending rules live here, in code.
 
 The model proposes. This module decides. A model can never widen a limit, and
-the reason a request was refused is always a fact about the ledger, never an
-opinion about the prompt.
+the reason a request was refused is always a fact about the ledger or about
+geography, never an opinion about the prompt.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from twin.payments.rails import Rail
 
 
 class Verdict(str, Enum):
@@ -52,6 +56,8 @@ class Action:
     justification: str = ""
     source: str = "twin"
     direction: str = "out"
+    country: str = ""
+    currency: str = ""
 
     @property
     def is_recurring(self) -> bool:
@@ -104,7 +110,8 @@ class SpendWindow:
         return self._by_recipient.get(recipient, 0)
 
 
-def evaluate(action: Action, policy: Policy, window: SpendWindow, day: int) -> Decision:
+def evaluate(action: Action, policy: Policy, window: SpendWindow, day: int,
+             rail: "Rail | None" = None, sender_country: str = "") -> Decision:
     ceiling = policy.ceiling_for(action.recipient) if action.recipient else None
     limits = {
         "amount_cents": action.amount_cents,
@@ -113,6 +120,7 @@ def evaluate(action: Action, policy: Policy, window: SpendWindow, day: int) -> D
         "daily_cap_cents": policy.daily_spend_cap_cents,
         "recipient_used_cents": window.recipient_total(action.recipient) if action.recipient else 0,
         "recipient_ceiling_cents": ceiling if ceiling is not None else -1,
+        "recipient_country": action.country,
     }
 
     if action.verb in policy.blocked_actions:
@@ -120,6 +128,13 @@ def evaluate(action: Action, policy: Policy, window: SpendWindow, day: int) -> D
 
     if action.recipient and policy.allowed_recipients and action.recipient not in policy.allowed_recipients:
         return Decision(Verdict.DENY, f"unknown recipient '{action.recipient}'", action.id, "recipient_allowlist", limits)
+
+    # Geography before arithmetic. A charge the chosen rail can never deliver is
+    # not a question of whether the amount is allowed.
+    if action.direction_out and rail is not None:
+        unreachable = rail.blocks(action.country, sender_country)
+        if unreachable:
+            return Decision(Verdict.DENY, unreachable, action.id, "rail_unavailable", limits)
 
     if action.direction_out and ceiling is not None:
         already = window.recipient_total(action.recipient)

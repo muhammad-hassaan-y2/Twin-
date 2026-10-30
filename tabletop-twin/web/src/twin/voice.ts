@@ -111,9 +111,10 @@ export class TwinVoiceSystem extends createSystem({
     const pending = twin.pending;
     if (approve) approve.visible = pending !== null;
     if (pending) {
-      const dollars = (pending.amount_cents / 100).toFixed(2);
+      const where = pending.country ? ` in ${pending.country}` : '';
       approve?.getElementById<UIKit.Text>('ApproveText')?.setProperties({
-        text: `${pending.verb} $${dollars} to ${pending.recipient || 'them'}, ${pending.rule}`,
+        text: `${pending.verb} ${pending.currency} ${pending.amount_dollars.toFixed(2)} to ` +
+          `${pending.recipient || 'them'}${where}, ${pending.rule}`,
       });
     }
 

@@ -43,6 +43,41 @@ tested against a gateway that actually answers on a socket: one that loses a rep
 after taking the money, one that replays an idempotency key, and one that refuses a
 credential before any order exists.
 
+## Where money can actually go
+
+Which rail reaches which country, what it charges, and how fast it settles is a
+catalog, not a set of conditions in the code. Sanctions, local data rules and fee
+contracts all change, so the file that holds them is editable, dated, and names the
+sources it was compiled from. Three properties hold it to:
+
+- **Availability has a direction.** A country that can send but cannot hold money is
+  refused as a recipient and accepted as a payer. A rail that will not operate inside
+  a country is only refused when both ends are in it.
+- **An unverified map denies nothing.** A rail refuses a country only when its own
+  coverage was actually checked. A guessed refusal sends someone to a different bank
+  for no reason, which is worse than the provider declining the charge — and a
+  decline, unlike a lying policy, is something the state machine can handle honestly.
+- **Nobody converts anything.** An amount stays in the currency of the ledger it came
+  from, written in that currency's own minor units, so a Japanese figure has no
+  decimals and a Bahraini one has three. There is no exchange-rate source in this
+  repository, so a conversion never appears as a number — a currency the rail must
+  handle shows up only as part of its fee.
+
+Geography is checked before arithmetic: a payment the chosen rail can never deliver
+is refused on that ground, and the refusal names the rails that could reach it. A
+rail is only selectable when this deployment actually has a transport for it, and a
+world restored from the database that cannot keep the rail it saved comes back as the
+sandbox with that written into its log rather than claiming a settlement path it does
+not have.
+
+Reconciliation does not need somebody standing at the table. When
+`TWIN_RECONCILE_SEC` is set and a live provider is configured, a background sweep
+periodically asks the provider about every attempt still sitting in **unknown**,
+across every account, and writes what came back to the audit trail. It is
+deliberately modest about its own success: the provider confirming that money moved
+is not the same as the paid-for thing arriving, so a swept payment is never marked as
+verified, and the heartbeat keeps reporting that gap.
+
 ## Whose world it is
 
 Nobody sees anybody else's table. An account is created with an email and a
