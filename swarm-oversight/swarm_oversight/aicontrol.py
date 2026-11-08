@@ -610,8 +610,10 @@ def main() -> None:
 
     protocols = tuple(p for p in args.protocols.split(",") if p in PROTOCOLS)
     if args.identity_sweep:
-        picked = next((p for p in protocols if p in BEHIND_RULES),
-                      "untrusted_monitoring")
+        picked = ("untrusted_monitoring" if "untrusted_monitoring" in protocols
+                  else next((q for q in protocols if q in BEHIND_RULES), None))
+        if picked is None:
+            raise SystemExit("--identity-sweep needs an arm that sits behind the rules")
         text = identity_to_markdown(identity_sweep(range(args.seeds),
                                                    protocol=picked))
         print(text)

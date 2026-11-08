@@ -350,7 +350,10 @@ def test_the_identity_sweep_prices_the_model_against_free_rules():
         if r["both"][0] is not None:
             assert r["both"][0] <= min(r["prefix"][0], r["words"][0]) + 1e-12
         if r["both_hold"][0] is not None:
-            assert r["both_hold"][0] <= r["model"][0] + 1e-12, r["scenario"]
+            # not merely no worse: the same attack money, scenario by scenario,
+            # and less of the legitimate money, because the rule that holds
+            # instead of freezing never stops the payments that were owed
+            assert r["both_hold"][0] == pytest.approx(r["model"][0]), r["scenario"]
             assert r["both_hold"][1] <= r["model"][1] + 1e-12, r["scenario"]
     # freeze, not judgement, is what costs legitimate money
     assert by["relay_fanout"]["both_hold"][1] < by["relay_fanout"]["both"][1]

@@ -1,0 +1,640 @@
+{
+  "measured": {
+    "records": 189579,
+    "kinds": {
+      "payload": 91037,
+      "response": 23008,
+      "recovered_text": 75534
+    },
+    "edges": 61125,
+    "roots": 128454,
+    "parent_nodes": 26248,
+    "intermediate_nodes": 0,
+    "hops_observable": 1,
+    "with_time": 0,
+    "with_tags": 37,
+    "fan_out": {
+      "n": 26248,
+      "mean": 2.329,
+      "median": 1,
+      "p90": 4,
+      "p99": 12,
+      "max": 858
+    },
+    "share_only_child": 0.6207,
+    "share_split": 0.3793,
+    "hubs_ge_10": 1168,
+    "hubs_ge_100": 5,
+    "max_fan_out": 858,
+    "destinations": 28086,
+    "destination_marks": 116646,
+    "destination_top1_share": 0.1464,
+    "destination_top10_share": 0.2865,
+    "destination_hhi": 0.025516,
+    "destination_counts": {
+      "n": 28086,
+      "mean": 4.153,
+      "median": 1,
+      "p90": 5,
+      "p99": 34,
+      "max": 17081
+    },
+    "busiest_parents": [
+      [
+        "R0024455",
+        858
+      ],
+      [
+        "R0036471",
+        270
+      ],
+      [
+        "R0080310",
+        134
+      ],
+      [
+        "R0036645",
+        108
+      ],
+      [
+        "R0049534",
+        104
+      ],
+      [
+        "R0050038",
+        90
+      ],
+      [
+        "R0017410",
+        84
+      ],
+      [
+        "R0116826",
+        70
+      ]
+    ],
+    "fan_out_capped_at": 200
+  },
+  "capacity": {
+    "per_payee_window_cents": 60000,
+    "window_ticks": 60,
+    "distinct_payees_observed": 28086,
+    "top_payee_share": 0.1464,
+    "payees_to_move_1m": 166.7,
+    "runs_the_pool_can_hide": 168.52,
+    "pool_needed_for_1m": 0.006
+  },
+  "swept": [
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 1,
+      "ordering": "tight",
+      "violation_rate": 0.1,
+      "violation_rate_order_free": 0.1,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 1,
+      "ordering": "worst",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.1,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 1,
+      "ordering": "random",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.1,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 4,
+      "ordering": "tight",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.0,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 4,
+      "ordering": "worst",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.0,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 9000,
+      "payees_per_attack": 4,
+      "ordering": "random",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.0,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 1,
+      "ordering": "tight",
+      "violation_rate": 0.225,
+      "violation_rate_order_free": 0.225,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 1,
+      "ordering": "worst",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.225,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.07,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.07
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 1,
+      "ordering": "random",
+      "violation_rate": 0.12,
+      "violation_rate_order_free": 0.225,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.017,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.017
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 4,
+      "ordering": "tight",
+      "violation_rate": 0.07,
+      "violation_rate_order_free": 0.07,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0269,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0269
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 4,
+      "ordering": "worst",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.07,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.07,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.07
+    },
+    {
+      "payment_cents": 30000,
+      "payees_per_attack": 4,
+      "ordering": "random",
+      "violation_rate": 0.0,
+      "violation_rate_order_free": 0.07,
+      "recall_windowed": null,
+      "money_out_windowed": null,
+      "fa_clean_windowed": 0.07,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.07
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 1,
+      "ordering": "tight",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 1,
+      "ordering": "worst",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 1,
+      "ordering": "random",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 4,
+      "ordering": "tight",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 4,
+      "ordering": "worst",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 90000,
+      "payees_per_attack": 4,
+      "ordering": "random",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 1,
+      "ordering": "tight",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 1,
+      "ordering": "worst",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 1,
+      "ordering": "random",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 4,
+      "ordering": "tight",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 4,
+      "ordering": "worst",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    },
+    {
+      "payment_cents": 300000,
+      "payees_per_attack": 4,
+      "ordering": "random",
+      "violation_rate": 1.0,
+      "violation_rate_order_free": 1.0,
+      "recall_windowed": 1.0,
+      "money_out_windowed": 0.0,
+      "fa_clean_windowed": 0.0,
+      "fa_clean_no_alias": 0.0,
+      "over_merged": 0.0
+    }
+  ],
+  "interval": {
+    "pool1_tight": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.1,
+        "violation_rate_order_free": 0.1,
+        "recall": 1.0,
+        "missed": 0,
+        "money_out_of_violations": 0.0,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": 0.0
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.1,
+        "violation_rate_order_free": 0.1,
+        "recall": 1.0,
+        "missed": 0,
+        "money_out_of_violations": 0.0,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": 0.0
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.1,
+        "violation_rate_order_free": 0.1,
+        "recall": 1.0,
+        "missed": 0,
+        "money_out_of_violations": 0.0,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": 0.0
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.1,
+        "violation_rate_order_free": 0.1,
+        "recall": 1.0,
+        "missed": 0,
+        "money_out_of_violations": 0.0,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": 0.0
+      },
+      "over_merged": 0.0
+    },
+    "pool1_worst": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "over_merged": 0.0
+    },
+    "pool1_random": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.09,
+        "mean_latency": null
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.1,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "over_merged": 0.0
+    },
+    "pool4_tight": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "over_merged": 0.0
+    },
+    "pool4_worst": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "over_merged": 0.0
+    },
+    "pool4_random": {
+      "windowed": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "lifetime": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "no_alias": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "aggregate": {
+        "runs": 200,
+        "violation_rate": 0.0,
+        "violation_rate_order_free": 0.0,
+        "recall": null,
+        "missed": 0,
+        "money_out_of_violations": null,
+        "false_alarms_on_clean": 0.0,
+        "mean_latency": null
+      },
+      "over_merged": 0.0
+    }
+  },
+  "source": "C:\\Users\\Hassaan\\Documents\\Qoder\\2026-10-28\\faa0cc64\\Twin-\\swarm-oversight\\data\\redacted.jsonl.gz",
+  "data_url": "https://swarmtraces.org/data/final/redacted.jsonl.gz",
+  "citation": "Forman, Kharlov, Tom, Ladish, Kitts, Byrd, McKenzie, Piecha, Swarm Traces, 25 September 2026"
+}
