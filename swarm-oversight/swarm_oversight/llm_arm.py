@@ -275,6 +275,9 @@ class LLMPolicy:
                 with urllib.request.urlopen(req, timeout=120) as r:
                     return json.loads(r.read())
             except urllib.error.HTTPError as e:
+                if e.code == 400 and attempt == 0 and body.pop("seed", None) is not None:
+                    data = json.dumps(body).encode()
+                    continue  # endpoint that will not accept a seed; ask once without
                 if e.code in (429, 500, 502, 503, 504) and attempt < 5:
                     time.sleep(min(60, 2 ** attempt * 2))
                     continue
