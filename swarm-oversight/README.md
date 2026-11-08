@@ -41,7 +41,7 @@ This repo measures that gap and what it costs to close it, in money:
 ## Running it
 
     pip install -e .[dev]
-    pytest                                        # 95 tests, stdlib only
+    pytest                                        # 98 tests, stdlib only
     python -m swarm_oversight.report --seeds 200  # writes results/summary.md + 7 CSVs
     python -m swarm_oversight.tracegraph          # the published incident data
     python -m swarm_oversight.aicontrol --seeds 50 --merge prefix --out results

@@ -19,7 +19,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate, Paragraph,
+from reportlab.platypus import (BaseDocTemplate, Frame, Image, PageTemplate, Paragraph,
                                 Spacer, Table, TableStyle)
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
@@ -128,6 +128,44 @@ def bullets(items, size=8.6):
 
 MON = "<font face='Courier' size='7.4'>"
 END = "</font>"
+NL = chr(10)
+
+
+def pareto(path: Path, points: list[tuple[str, float, float, float]]) -> Path:
+    """Attack money settled against legitimate money held, one point per defense.
+    The coordinates come from the tables, so the figure cannot disagree with them."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(6.9, 2.6))
+    for name, x, y, cost in points:
+        ax.scatter([x], [y], s=46 if cost else 30, marker="D" if cost else "o",
+                   facecolor="white" if cost else "#25324a",
+                   edgecolor="#8c1d2f" if cost else "#25324a", zorder=3,
+                   linewidths=1.2 if cost else 0.9,
+                   label=name + ("   (" + f"${cost:.5f}/log)" if cost else "   (free)"))
+    paid = max(points, key=lambda q: q[3])
+    free = [q for q in points if q[3] == 0 and abs(q[1] - paid[1]) < 1e-9
+            and q[2] < paid[2]]
+    if free:
+        ax.plot([paid[1], free[0][1]], [paid[2], free[0][2]], ls=(0, (3, 2)),
+                lw=0.9, color="#8c1d2f", zorder=2)
+    ax.set_xlabel("share of attack money that settles  (better left)", fontsize=7.2)
+    ax.set_ylabel("share of legitimate" + NL + "money held  (better down)", fontsize=7.2)
+    ax.set_xlim(0.705, 0.965)
+    ax.set_ylim(-0.03, 0.175)
+    ax.grid(True, lw=0.4, color="#e3e8ef")
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(labelsize=6.6)
+    ax.legend(fontsize=6.0, loc="lower left", frameon=False, ncol=2,
+              handlelength=1.1, columnspacing=1.0, handletextpad=0.4,
+              borderpad=0.1, labelspacing=0.55)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(path, dpi=220)
+    plt.close(fig)
+    return path
 
 
 def build(out: Path, results: Path = RESULTS) -> Path:
@@ -210,12 +248,27 @@ def build(out: Path, results: Path = RESULTS) -> Path:
                            "attack $ out")
     free_out = cell(both_rows, both_head, "-", "rules_hold", "attack $ out")
     free_held = cell(both_rows, both_head, "-", "rules_hold", "benign $ held")
+    free_rules_out = cell(both_rows, both_head, "-", "rules", "attack $ out")
+    free_rules_held = cell(both_rows, both_head, "-", "rules", "benign $ held")
+    model_held = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring",
+                      "benign $ held")
     sweep_by = row_by(sweep_head, sweep_rows, "scenario")
     fanout_hold = pair("relay_fanout", "both, no freeze")[1]
     fanout_freeze = pair("relay_fanout", "both")[1]
     reversed_hold = pair("relay_reversed", "both, no freeze")[1]
     reversed_freeze = pair("relay_reversed", "both")[1]
     renamed = pair("split_renamed", "prefix")
+
+    pts = [("per-mandate cap only", float(base_mandate),
+            float(cell(ctl_rows, ctl_head, "-", "per_mandate", "benign $ held")), 0.0),
+           ("rules, freeze the swarm", float(base_rules_out), float(base_rules_held), 0.0),
+           ("rules, hold the payment", float(base_rules_out),
+            float(cell(ctl_rows, ctl_head, "-", "rules_hold", "benign $ held")), 0.0),
+           ("both readings, freeze", float(free_rules_out), float(free_rules_held), 0.0),
+           ("both readings, hold the payment", float(free_out), float(free_held), 0.0),
+           ("rules + model on the seam", float(model_out), float(model_held),
+            float(model_cost))]
+    fig = pareto(results / "fig_pareto.png", pts)
 
     keep = [("-", "rules"), ("-", "rules_hold"),
             ("competent_honest", "trust"),
@@ -247,7 +300,7 @@ def build(out: Path, results: Path = RESULTS) -> Path:
               size=10.2, leading=12.4, color=FAINT, space=6),
          para("Apart Research Swarm Alignment 2026, Track 4 &nbsp;&#183;&nbsp; "
               "Muhammad Hassaan Shaukat and R&#305;zgar Ozan<br/>"
-              "Seeded, dependency-free, reproducible from the seeds alone: 95 tests, and "
+              "Seeded and stdlib-only, reproducible from the seeds alone: 98 tests, and "
               "every figure below parsed out of a table this build re-reads.",
               size=7.8, leading=10.2, color=FAINT, space=8),
 
@@ -313,7 +366,7 @@ def build(out: Path, results: Path = RESULTS) -> Path:
               "and flagged 92% of benign swarms at 200.",
               "<b>Intervals.</b> 200 seeds per cell for the rule results, 50 for the model "
               "arms, Wilson 95% intervals, no cell reported without them.",
-              "<b>Negative controls.</b> 95 tests; each one removes a rule, a protocol "
+              "<b>Negative controls.</b> 98 tests; each one removes a rule, a protocol "
               "setting or a capability and requires the failure to come back. Two of the "
               "results below are the product of that habit rather than of looking for them.",
           ])]
@@ -445,6 +498,12 @@ def build(out: Path, results: Path = RESULTS) -> Path:
                "payees sharing a "
                "15-character identifier stem, which is the actual namespace of the incident "
                "dataset.", space=4),
+          para("Pooled over the same 50 seeds and 14 scenarios, both axes lower is better. "
+               "The open diamond is the only point that pays for a call, and the dashed line "
+               "runs to the free rule that matches it on attack money and beats it on "
+               "legitimate money:", space=3),
+          Image(str(fig), width=W, height=W * 2.6 / 6.9),
+          Spacer(1, 3),
           para("Each cell is attack money settled / legitimate money held, over the same 50 "
                "seeds. Only the last column pays for a call:", space=3),
           grid(sweep_head, sweep_rows,
@@ -501,8 +560,8 @@ def build(out: Path, results: Path = RESULTS) -> Path:
           para("Repo github.com/muhammad-hassaan-y2/Twin-, directory "
                f"<font face='Courier' size='7.4'>swarm-oversight/</font>, branch "
                f"<font face='Courier' size='7.4'>aggregate-gap</font>. Stdlib only, except "
-               "reportlab for this document.", space=3),
-          para(f"{MON}pip install -e .[dev] &amp;&amp; pytest&nbsp;&nbsp;# 95 tests<br/>"
+               "reportlab and matplotlib for this document.", space=3),
+          para(f"{MON}pip install -e .[dev] &amp;&amp; pytest&nbsp;&nbsp;# 98 tests<br/>"
                "python -m swarm_oversight.report --seeds 200&nbsp;&nbsp;# rules, gateway, "
                "horizon<br/>"
                "python -m swarm_oversight.tracegraph&nbsp;&nbsp;# the published incident "
