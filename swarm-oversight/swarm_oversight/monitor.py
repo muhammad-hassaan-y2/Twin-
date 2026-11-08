@@ -35,16 +35,39 @@ class Limits:
     # the first version, which summed everything ever paid to the payee and so
     # flags benign swarms once the log is long enough.
     payee_total: str = "window"
+    # How "same payee" is decided. "prefix" is the first version: normalise, then
+    # merge on a shared prefix or a character-similarity of `alias_ratio`. It
+    # catches a misspelling and it merges identifier namespaces that are nothing
+    # of the kind (destination-000003 against destination-000058), and it cannot
+    # see a word-order swap. "tokens" merges only when the meaningful words are
+    # the same set, which is what a rename by word order is. "both" counts every
+    # payment toward the totals of both readings, which is the cheapest thing that
+    # can catch a misspelling and a rename at once -- and it inherits both
+    # mistakes as well, so it over-merges the stems too.
+    merge: str = "prefix"
 
 
 def _norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+# Words that carry no identity: "Northwind Logistics Ltd" and "Northwind
+# Logistics GmbH" are one payee, and "the" is not a trader.
+NOISE = frozenset("ltd limited inc llc plc gmbh sa ag co corp company the and of "
+                  "for a services service group holdings".split())
+
+
+def _tokens(name: str) -> tuple[str, ...]:
+    return tuple(sorted({t for t in re.split(r"[^a-z0-9]+", name.lower())
+                         if t and t not in NOISE}))
+
+
 class Session:
     """Monitor state for one log, fed one action at a time."""
 
     def __init__(self, limits: Limits, checks: frozenset[str]):
+        if limits.merge not in ("prefix", "tokens", "both"):
+            raise ValueError(f"unknown merge rule: {limits.merge}")
         self.lim = limits
         self.checks = checks
         self.spent: dict[str, int] = defaultdict(int)
@@ -52,14 +75,26 @@ class Session:
         self.payee_total: dict[str, int] = defaultdict(int)
         self.payee_log: dict[str, list[Action]] = defaultdict(list)
         self.canon: list[str] = []
+        self.canon_words: dict[tuple[str, ...], str] = {}
         # upstream[x][o] = transfers that carried agent o's money to x, so a
         # relay through several hops is traced back to where it started.
         self.upstream: dict[str, dict[str, list[int]]] = defaultdict(dict)
         self.raised: set[tuple[str, tuple[int, ...]]] = set()
 
-    def payee_key(self, name: str) -> str:
-        if "payee_alias" not in self.checks:
-            return name
+    def _words_key(self, name: str) -> str:
+        """Identity is the set of meaningful words. No prefix and no character
+        similarity, because both of those merge real identifier namespaces that
+        differ only in the digits at the end of a long shared stem."""
+        words = _tokens(name)
+        if not words:
+            return _norm(name) or name
+        if words in self.canon_words:
+            return self.canon_words[words]
+        key = "|".join(words)
+        self.canon_words[words] = key
+        return key
+
+    def _prefix_key(self, name: str) -> str:
         n = _norm(name)
         if not n:
             # A name with no letters or digits would prefix-match every payee.
@@ -70,6 +105,22 @@ class Session:
                 return c
         self.canon.append(n)
         return n
+
+    def payee_key(self, name: str) -> str:
+        if "payee_alias" not in self.checks:
+            return name
+        if self.lim.merge == "tokens":
+            return self._words_key(name)
+        return self._prefix_key(name)
+
+    def payee_keys(self, name: str) -> tuple[str, ...]:
+        """Every family one payment counts toward. The two readings key in
+        disjoint namespaces (a words key always carries a "|"), so "both" is the
+        OR of them: the payment enters each family's total and each family's
+        window, and either family crossing the bound is enough to flag."""
+        if self.lim.merge != "both" or "payee_alias" not in self.checks:
+            return (self.payee_key(name),)
+        return tuple(dict.fromkeys((self._prefix_key(name), self._words_key(name))))
 
     def observe(self, a: Action) -> list[Flag]:
         lim, on = self.lim, self.checks
@@ -110,20 +161,20 @@ class Session:
 
         # Split payment: several agents pay one payee inside a window and the
         # swarm's total to that payee inside the same window crosses the cap.
-        key = self.payee_key(a.payee)
-        self.payee_total[key] += a.amount
-        self.payee_log[key].append(a)
-        for rule, span in (("split_payment", lim.window),
-                           ("slow_split", lim.long_window)):
-            if rule not in on:
-                continue
-            recent = [p for p in self.payee_log[key] if a.tick - p.tick <= span]
-            agents = {p.agent for p in recent}
-            total = (self.payee_total[key] if lim.payee_total == "lifetime"
-                     else sum(p.amount for p in recent))
-            if total > lim.per_payee and len(agents) >= lim.split_min_agents:
-                emit(Flag(rule, tuple(p.seq for p in recent),
-                          f"{len(agents)} agents sent {total} to {a.payee}"))
+        for key in self.payee_keys(a.payee):
+            self.payee_total[key] += a.amount
+            self.payee_log[key].append(a)
+            for rule, span in (("split_payment", lim.window),
+                               ("slow_split", lim.long_window)):
+                if rule not in on:
+                    continue
+                recent = [p for p in self.payee_log[key] if a.tick - p.tick <= span]
+                agents = {p.agent for p in recent}
+                total = (self.payee_total[key] if lim.payee_total == "lifetime"
+                         else sum(p.amount for p in recent))
+                if total > lim.per_payee and len(agents) >= lim.split_min_agents:
+                    emit(Flag(rule, tuple(p.seq for p in recent),
+                              f"{len(agents)} agents sent {total} to {a.payee}"))
         return out
 
 

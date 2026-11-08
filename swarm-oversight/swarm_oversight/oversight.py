@@ -184,11 +184,12 @@ def over_aggregate(a: Action, view: SwarmView) -> bool:
 
 
 def score(sc: Scenario, arm: str, advisor=None, limits: Limits | None = None,
-          ledger=None) -> dict:
-    """One scenario, one defense, on the money axis."""
+          ledger=None, freeze: bool = True) -> dict:
+    """One scenario, one defense, on the money axis. `freeze` only reaches the
+    rules: see `replay`."""
     use_advisor = advisor is not None and arm in ("model", "rules+model")
     got: Outcome = replay(sc, "monitor" if arm in ("rules", "rules+model") else "per_mandate",
-                          limits=limits, ledger=ledger,
+                          limits=limits, ledger=ledger, freeze=freeze,
                           advisor=advisor if use_advisor else None)
     return dict(scenario=sc.name, arm=arm, runs=1, detected=int(got.detected),
                 false_alarm=int(got.false_stop),

@@ -55,9 +55,16 @@ POLICIES = ("per_mandate", "ledger", "monitor", "ledger+monitor")
 
 def replay(sc: Scenario, policy: str, limits: Limits | None = None,
            ledger: LedgerCap | None = None,
-           checks: tuple[str, ...] = CHECKS, advisor=None) -> Outcome:
+           checks: tuple[str, ...] = CHECKS, advisor=None,
+           freeze: bool = True) -> Outcome:
     """`advisor`, if given, is asked about each action the rules let through:
-    it sees everything admitted so far and returns a Decision or None."""
+    it sees everything admitted so far and returns a Decision or None.
+
+    `freeze` is what a flag does to the rest of the log: stop the whole swarm for
+    review (the shipped behaviour, and the one an operator would want), or hold
+    only the payment that raised it. An advisor can only ever do the second, so
+    comparing a rule against an advisor without this knob compares the reaction
+    as well as the judgement."""
     if policy not in POLICIES:
         raise ValueError(policy)
     lim = limits or Limits()
@@ -88,7 +95,7 @@ def replay(sc: Scenario, policy: str, limits: Limits | None = None,
             out["attack_total" if is_attack else "benign_total"] += a.amount
         ok = _decide(a, frozen, lim, spent, ledger if use_ledger else None, settled_sum)
         if ok and use_monitor and session.observe(a):
-            ok, frozen = False, True
+            ok, frozen = False, freeze
         if ok and advisor is not None:
             d = advisor.decide(a, tuple(admitted))
             consults += d is not None

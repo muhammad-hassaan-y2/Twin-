@@ -253,9 +253,54 @@ def relay_reversed(seed: int) -> Scenario:
     return Scenario("relay_reversed", seed, _sorted(log.actions), attack)
 
 
+# One firm, three ways of typing its name. Every pair is below the 0.85
+# character cutoff (0.62, 0.82, 0.50) and neither is a prefix of the other, so
+# the string rule reads three payees. Reorder the words and it is one payee,
+# which is what anyone reading the invoices knows.
+RENAMED = ["offshore-consulting-ltd", "consulting-offshore-ltd",
+           "Offshore Consulting Group"]
+
+
+def split_renamed(seed: int) -> Scenario:
+    """The split that only an identity rule sees: one payee, renamed by word
+    order, each payment under the bound on its own."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    attack = _three_payments(rng, log, RENAMED, [start, start + 1, start + 2])
+    return Scenario("split_renamed", seed, _sorted(log.actions), attack)
+
+
+STEMS = ["destination-000003", "destination-000058"]
+
+
+def benign_stem(seed: int) -> Scenario:
+    """The false alarm the same cutoff makes. Two payees whose names share a
+    15-character identifier stem are 0.88 similar to a string metric and have
+    nothing to do with each other; paid separately they stay under the bound.
+
+    This log is the incident data's identifier namespace, written as a scenario:
+    the published reconstruction has 28,086 payees of exactly this shape, and the
+    prefix merge adds their payments together.
+    """
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    tick = start
+    for payee in STEMS:
+        for agent in _roomiest(rng, log, 2):
+            log.add(agent, "spend", _fit(log, agent, rng.randint(22_000, 26_000)),
+                    payee, tick)
+            tick += 1
+    return Scenario("benign_stem", seed, _sorted(log.actions))
+
+
 HELD_OUT = {"benign_busy": benign_busy, "split_distinct": split_distinct,
             "split_slow": split_slow, "alias_far": alias_far,
-            "relay_fanout": relay_fanout, "relay_reversed": relay_reversed}
+            "relay_fanout": relay_fanout, "relay_reversed": relay_reversed,
+            "split_renamed": split_renamed, "benign_stem": benign_stem}
 
 
 def drip(seed: int, gap: int, payees: int = 1, payment: int = 20_000,
