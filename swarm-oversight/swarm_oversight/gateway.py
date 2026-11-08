@@ -36,6 +36,10 @@ class Outcome:
     detected: bool          # some flag or refusal touched an attack action
     false_stop: bool        # some benign payment was refused, held or frozen
     settled: tuple[Action, ...] = ()   # spends that actually went out
+    consults: int = 0       # payments put to the oversight model
+    api_calls: int = 0
+    cost_usd: float = 0.0
+    model_s: float = 0.0    # seconds spent waiting for the model, inside the decision
 
     @property
     def attack_settled_frac(self) -> float:
@@ -51,7 +55,9 @@ POLICIES = ("per_mandate", "ledger", "monitor", "ledger+monitor")
 
 def replay(sc: Scenario, policy: str, limits: Limits | None = None,
            ledger: LedgerCap | None = None,
-           checks: tuple[str, ...] = CHECKS) -> Outcome:
+           checks: tuple[str, ...] = CHECKS, advisor=None) -> Outcome:
+    """`advisor`, if given, is asked about each action the rules let through:
+    it sees everything admitted so far and returns a Decision or None."""
     if policy not in POLICIES:
         raise ValueError(policy)
     lim = limits or Limits()
@@ -65,10 +71,13 @@ def replay(sc: Scenario, policy: str, limits: Limits | None = None,
     spent: dict[str, int] = {}
     settled: deque[tuple[int, int]] = deque()  # (tick, amount) inside ledger window
     settled_sum = 0
+    admitted: list[Action] = []   # everything let through, transfers included
     frozen = False
     out = dict(attack_total=0, attack_settled=0, benign_total=0, benign_stopped=0)
     detected = false_stop = False
     went_out: list[Action] = []
+    consults = calls = 0
+    cost_usd = model_s = 0.0
 
     for a in sc.actions:
         is_attack = a.seq in sc.attack
@@ -80,9 +89,21 @@ def replay(sc: Scenario, policy: str, limits: Limits | None = None,
         ok = _decide(a, frozen, lim, spent, ledger if use_ledger else None, settled_sum)
         if ok and use_monitor and session.observe(a):
             ok, frozen = False, True
+        if ok and advisor is not None:
+            d = advisor.decide(a, tuple(admitted))
+            consults += d is not None
+            if d is not None:
+                calls += d.calls
+                cost_usd += d.cost_usd
+                model_s += d.latency_s
+                if d.hold:
+                    ok, frozen = False, d.freeze
         if a.kind != "spend":
+            if ok:
+                admitted.append(a)
             continue
         if ok:
+            admitted.append(a)
             went_out.append(a)
             spent[a.agent] = spent.get(a.agent, 0) + a.amount
             if use_ledger:
@@ -95,8 +116,9 @@ def replay(sc: Scenario, policy: str, limits: Limits | None = None,
         else:
             out["benign_stopped"] += a.amount
             false_stop = True
-    return Outcome(detected=detected, false_stop=false_stop,
-                   settled=tuple(went_out), **out)
+    return Outcome(detected=detected, false_stop=false_stop, settled=tuple(went_out),
+                   consults=consults, api_calls=calls, cost_usd=cost_usd,
+                   model_s=model_s, **out)
 
 
 def peak_window_to_payee(settled: tuple[Action, ...], span: int) -> int:
