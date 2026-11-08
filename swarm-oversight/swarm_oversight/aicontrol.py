@@ -536,7 +536,7 @@ def scenarios_to_markdown(rows: list[dict]) -> str:
 
 
 ID_HEAD = ("scenario", "prefix", "words", "both", "both, no freeze",
-           "rules+model", "model $/log")
+           "rules+model", "model $/log", "seeds where model differs")
 
 
 def identity_sweep(seeds, population: str = "competent_honest",
@@ -550,6 +550,7 @@ def identity_sweep(seeds, population: str = "competent_honest",
     for name, build in {**ALL, **HELD_OUT}.items():
         acc = {k: _blank() for k in ("prefix", "words", "both", "both_hold", "model")}
         cost = 0.0
+        per_seed = {"both_hold": [], "model": []}
         for arm_key, merge, freeze in (("prefix", "prefix", True), ("words", "tokens", True),
                                        ("both", "both", True), ("both_hold", "both", False)):
             lim = Limits(merge=merge)
@@ -558,6 +559,9 @@ def identity_sweep(seeds, population: str = "competent_honest",
                 for k in ("runs", "attack_settled", "attack_total", "benign_stopped",
                           "benign_total"):
                     acc[arm_key][k] += one[k]
+                if arm_key == "both_hold":
+                    per_seed["both_hold"].append(
+                        one["attack_settled"] / one["attack_total"] if one["attack_total"] else 0.0)
         lim = Limits()
         for seed in seeds:
             ctl = make(protocol, pop, lim, seed)
@@ -565,8 +569,13 @@ def identity_sweep(seeds, population: str = "competent_honest",
             for k in ("runs", "attack_settled", "attack_total", "benign_stopped",
                       "benign_total"):
                 acc["model"][k] += one[k]
+            per_seed["model"].append(
+                one["attack_settled"] / one["attack_total"] if one["attack_total"] else 0.0)
             cost += one["cost_usd"]
-        row = dict(scenario=name, model_cost_per_log=cost / len(seeds))
+        diffs = [m - h for m, h in zip(per_seed["model"], per_seed["both_hold"])]
+        row = dict(scenario=name, model_cost_per_log=cost / len(seeds),
+                   paired_nonzero=sum(abs(d) > 1e-12 for d in diffs),
+                   paired_max=round(max((abs(d) for d in diffs), default=0.0), 6))
         for key, a in acc.items():
             row[key] = (a["attack_settled"] / a["attack_total"] if a["attack_total"] else None,
                         a["benign_stopped"] / a["benign_total"] if a["benign_total"] else None)
@@ -582,13 +591,17 @@ def identity_to_markdown(rows: list[dict]) -> str:
             attack, held = r[key]
             cells.append("-" if attack is None else f"{attack:.3f} / {held:.3f}")
         cells.append(f"{r['model_cost_per_log']:.5f}")
+        cells.append(f"{r.get('paired_nonzero', 0)} (max {r.get('paired_max', 0.0):.3f})")
         out.append("|" + "|".join(cells) + "|")
     out += ["", "Each cell is attack money that settled / legitimate money held, over "
             "the same seeds. The five columns are the same monitor at five settings: "
             "the shipped string reading, the words reading, both readings counted "
             "together, both readings answering a flag by holding the payment instead "
             "of freezing the swarm, and the shipped rule with a model in the loop "
-            "reading identity by words. Only the last column pays for a call."]
+            "reading identity by words. Only the last column pays for a call. The "
+            "last column counts seeds where the model arm's settled attack money "
+            "differs from the free both-readings-hold arm on the same seed, and the "
+            "largest absolute difference: a paired comparison, not two pooled means."]
     return "\n".join(out)
 
 

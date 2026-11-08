@@ -119,3 +119,15 @@ def test_gemini_requires_its_own_env_var(monkeypatch):
     monkeypatch.setenv("SWARM_LLM_API_KEY", "a-muse-key-must-not-be-used")
     with pytest.raises(SystemExit):
         Gemini.from_env()
+
+def test_the_model_arm_matches_the_free_arm_seed_by_seed():
+    """The headline negative result, as a paired test: on every scenario and
+    seed, the stub model's settled attack money equals the free both-readings
+    -hold arm. If a change makes the model genuinely better (or worse) on some
+    seed, this fails and the report's claim must be revisited."""
+    from swarm_oversight.aicontrol import identity_sweep
+    rows = identity_sweep(range(5))
+    assert rows
+    for r in rows:
+        assert r["paired_nonzero"] == 0, r["scenario"]
+        assert r["paired_max"] == 0.0, r["scenario"]
