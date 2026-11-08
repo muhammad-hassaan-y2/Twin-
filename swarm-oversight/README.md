@@ -39,7 +39,7 @@ This repo measures that gap and what it costs to close it, in money:
 
 **Detection is not the story; the money is.** The monitor catches every attack it was tuned on
 and stays at 0 false alarms on benign logs of any length — but at the gateway it still lets
-44–67% of the attack money settle before the flag fires. Detection buys time; it does not stop
+43–67% of the attack money settle before the flag fires. Detection buys time; it does not stop
 the payment.
 
 **Prevention stops the money and stops legitimate work too.** A principal-wide cap sized from
