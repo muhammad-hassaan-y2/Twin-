@@ -281,7 +281,8 @@ def build(out: Path, results: Path = RESULTS) -> Path:
             ("reviewer_bought", "monitor_releases"),
             ("reviewer_suspicious", "trusted_editing")]
     table6 = [[("rules only" if p == "-" else p),
-               q.replace("untrusted_monitoring", "monitoring").replace("_blind", " (blind)"),
+               q.replace("untrusted_monitoring", "monitoring").replace("_blind", " (blind)")
+                .replace("rules_hold", "rules, hold the payment"),
                cell(ctl_rows, ctl_head, p, q, "attack $ out"),
                cell(ctl_rows, ctl_head, p, q, "benign $ held"),
                cell(ctl_rows, ctl_head, p, q, "calls/log"),
