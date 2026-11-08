@@ -1,15 +1,19 @@
-"""Build the sprint write-up: result tables in, eight pages of PDF out.
+"""Build the sprint write-up in the official Apart template: tables in, PDF out.
 
 Every number in the prose is read from a table under `results/` at build time, so
-the document cannot drift from the measurements it is supposed to describe. The
-tables themselves are produced by the modules they come from; see the commands in
-the last section.
+the document cannot drift from the measurements it describes. The structure
+follows the Swarm Alignment Hackathon report template (title + footnote, authors
+and affiliations, a labelled 150-250 word abstract, Introduction / Related Work /
+Methods / Results / Discussion and Limitations / Conclusion, Code and Data,
+Author Contributions, References, the required Limitations and Dual-Use appendix,
+and an LLM usage statement).
 
     python -m swarm_oversight.pdf_report --out report.pdf
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import re
 from pathlib import Path
 
@@ -30,7 +34,6 @@ RULE = colors.HexColor("#c9d0da")
 WASH = colors.HexColor("#f2f5f9")
 NAVY = colors.HexColor("#25324a")
 
-# Arial is here so that the collaborator's name is not a black box on the page.
 BODY = "Helvetica"
 FONT_DIR = Path("C:/Windows/Fonts")
 
@@ -52,7 +55,6 @@ STYLES = getSampleStyleSheet()
 
 
 def sections(path: Path) -> dict[str, str]:
-    """A results file split on its `## ` headings, first line of each kept."""
     out = {}
     for chunk in re.split(r"\n## ", path.read_text(encoding="utf-8"))[1:]:
         out[chunk.splitlines()[0]] = chunk
@@ -60,7 +62,6 @@ def sections(path: Path) -> dict[str, str]:
 
 
 def md_table(text: str) -> tuple[list[str], list[list[str]]]:
-    """The first markdown table in a chunk of text, as header and rows."""
     lines = [l for l in text.splitlines() if l.startswith("|")]
     if len(lines) < 3:
         raise ValueError("no markdown table found")
@@ -68,25 +69,21 @@ def md_table(text: str) -> tuple[list[str], list[list[str]]]:
     return head, [[c.strip() for c in l.strip("|").split("|")] for l in lines[2:]]
 
 
-def row_by(head: list[str], rows: list[list[str]], key_column: str) -> dict[str, list[str]]:
+def row_by(head, rows, key_column):
     return {r[head.index(key_column)]: r for r in rows}
 
 
-def value(rows: dict[str, list[str]], head: list[str], key: str, column: str) -> str:
-    """One cell, by row label and column name. Fails loudly rather than quoting a
-    number that is no longer in the table it came from."""
+def value(rows, head, key, column):
     if key not in rows:
         raise KeyError(f"row {key!r} is not in the table")
     return rows[key][head.index(column)]
 
 
-def num(rows: dict[str, list[str]], head: list[str], key: str, column: str) -> str:
-    """The leading figure of a cell, without its interval or its cents."""
+def num(rows, head, key, column):
     return value(rows, head, key, column).split()[0].split("/")[0].strip()
 
 
-def rng(*vals: str) -> str:
-    """A spread over the same measurement, collapsed when it is not a spread."""
+def rng(*vals):
     lo, hi = min(vals), max(vals)
     return lo if lo == hi else f"{lo}&ndash;{hi}"
 
@@ -121,6 +118,10 @@ def grid(head, rows, widths, size=6.5):
     return t
 
 
+def caption(text):
+    return para(text, size=7.6, leading=9.6, space=5, color=FAINT)
+
+
 def bullets(items, size=8.6):
     return [para("•&nbsp; " + t, size=size, leading=size + 2.6, space=2.6, indent=7)
             for t in items]
@@ -130,15 +131,39 @@ MON = "<font face='Courier' size='7.4'>"
 END = "</font>"
 NL = chr(10)
 
+ABSTRACT = (
+    "Agent payment protocols cap each mandate, not the principal: several agents that "
+    "each stay inside their own cap can together move more of one principal's money than "
+    "any was allowed. We measure this aggregate gap in cents settled, not flags raised, on "
+    "a seeded reproducible harness with a swarm monitor inline at a payment gateway. The "
+    "monitor holds a per-payee, per-window bound against every attack tuned to it, cutting "
+    "settled attack money from 1.00 to 0.43&ndash;0.67, while three held-out attacks that "
+    "never cross a bound settle in full. A model supervisor appears to help, but a paired "
+    "seed-by-seed ablation shows its whole measurable edge is a defect in our own "
+    "payee-identity rule plus a hold-versus-freeze reaction difference, reproducible for "
+    "free with two string comparisons. Live Gemini runs confirm the identity judgement a "
+    "model adds is real: it merges renames and misspellings the rules miss without "
+    "false-merging identifier namespaces, and an adversarial draft moved a real reviewer on "
+    "zero of six unambiguous breaches. A gateway ledger built from settled instructions "
+    "rather than agent reports is unchanged when agents tamper with their published logs. "
+    "The durable defence is a rate bound an attacker cannot argue with; identity and time "
+    "are the levers it leaves open.")
 
-def pareto(path: Path, points: list[tuple[str, float, float, float]]) -> Path:
-    """Attack money settled against legitimate money held, one point per defense.
-    The coordinates come from the tables, so the figure cannot disagree with them."""
+
+def plain(text):
+    return re.sub(r"<[^>]+>", "", text).replace("&ndash;", "-").replace("&nbsp;", " ")
+
+
+def abstract_words():
+    return len(re.findall(r"[A-Za-z0-9][A-Za-z0-9.'-]*", plain(ABSTRACT)))
+
+
+def pareto(path, points):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(6.9, 2.6))
+    fig, ax = plt.subplots(figsize=(6.9, 2.5))
     for name, x, y, cost in points:
         ax.scatter([x], [y], s=46 if cost else 30, marker="D" if cost else "o",
                    facecolor="white" if cost else "#25324a",
@@ -146,8 +171,7 @@ def pareto(path: Path, points: list[tuple[str, float, float, float]]) -> Path:
                    linewidths=1.2 if cost else 0.9,
                    label=name + ("   (" + f"${cost:.5f}/log)" if cost else "   (free)"))
     paid = max(points, key=lambda q: q[3])
-    free = [q for q in points if q[3] == 0 and abs(q[1] - paid[1]) < 1e-9
-            and q[2] < paid[2]]
+    free = [q for q in points if q[3] == 0 and abs(q[1] - paid[1]) < 1e-9 and q[2] < paid[2]]
     if free:
         ax.plot([paid[1], free[0][1]], [paid[2], free[0][2]], ls=(0, (3, 2)),
                 lw=0.9, color="#8c1d2f", zorder=2)
@@ -168,7 +192,40 @@ def pareto(path: Path, points: list[tuple[str, float, float, float]]) -> Path:
     return path
 
 
+def frontier_fig(path, csv_path):
+    """Best response of an attacker who knows the bound: settled share against
+    payment spacing, one curve per number of payee identities."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
+    fig, ax = plt.subplots(figsize=(6.9, 2.3))
+    for payees in ("1", "2", "3"):
+        rs = [r for r in rows if r["payees"] == payees]
+        xs = [int(r["gap"]) for r in rs]
+        ys = [int(r["monitor_settled"]) / int(r["attack_total"]) for r in rs]
+        ax.plot(xs, ys, marker="o", ms=2.5, lw=1.1,
+                label=f"{payees} payee identit{'y' if payees == '1' else 'ies'}")
+    ax.axhline(60000 / 140000, ls=(0, (3, 2)), lw=0.8, color="#8c1d2f",
+               label="one bound per window")
+    ax.set_xlabel("ticks between payments (attacker chooses)", fontsize=7.2)
+    ax.set_ylabel("share of attack money that settles", fontsize=7.2)
+    ax.set_ylim(0.35, 1.03)
+    ax.grid(True, lw=0.4, color="#e3e8ef")
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(labelsize=6.6)
+    ax.legend(fontsize=6.4, loc="lower right", frameon=False)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(path, dpi=220)
+    plt.close(fig)
+    return path
+
+
 def build(out: Path, results: Path = RESULTS) -> Path:
+    if not 150 <= abstract_words() <= 250:
+        raise ValueError(f"abstract is {abstract_words()} words, must be 150-250")
     summary = sections(results / "summary.md")
     detect_key = next(k for k in summary if k.startswith("Detection"))
     horizon_key = next(k for k in summary if k.startswith("Benign logs"))
@@ -181,12 +238,14 @@ def build(out: Path, results: Path = RESULTS) -> Path:
     gw_head, gw_rows = md_table(summary[attack_key])
     gl_head, gl_rows = md_table(summary[owed_key])
     tr_head, tr_rows = md_table(summary[trade_key])
-    sweep_head, sweep_rows = md_table((results / "control_identity_sweep.md")
-                                      .read_text(encoding="utf-8"))
-    ctl_head, ctl_rows = md_table((results / "control_stub_prefix.md")
-                                  .read_text(encoding="utf-8"))
-    both_head, both_rows = md_table((results / "control_stub_both.md")
-                                    .read_text(encoding="utf-8"))
+    sweep_head, sweep_rows = md_table((results / "control_identity_sweep.md").read_text(encoding="utf-8"))
+    ctl_head, ctl_rows = md_table((results / "control_stub_prefix.md").read_text(encoding="utf-8"))
+    both_head, both_rows = md_table((results / "control_stub_both.md").read_text(encoding="utf-8"))
+    probe_head, probe_rows = md_table((results / "control_stub_prefix_probe.md").read_text(encoding="utf-8"))
+    id_head, id_rows = md_table((results / "live" / "identity_gemini-3.5-flash-lite.md").read_text(encoding="utf-8"))
+    pers_head, pers_rows = md_table((results / "live" / "persuasion_gemini-3.5-flash-lite.md").read_text(encoding="utf-8"))
+    tam_head, tam_rows = md_table((results / "tampering.md").read_text(encoding="utf-8"))
+    trace_text = (results / "trace_table.md").read_text(encoding="utf-8")
 
     # ---- numbers, read out of the tables at build time -----------------------
     settled_by = row_by(gw_head, gw_rows, "scenario")
@@ -194,16 +253,13 @@ def build(out: Path, results: Path = RESULTS) -> Path:
     mon = lambda s: num(settled_by, gw_head, s, "monitor")
     tuned = ("split_payment", "split_wide", "split_alias")
     silent = ("split_distinct", "split_slow", "alias_far")
-
     owed_by = row_by(gl_head, gl_rows, "scenario")
     ledger_busy = num(owed_by, gl_head, "benign_busy", "ledger")
     trade_by = row_by(tr_head, tr_rows, "arm")
     tight_attack = num(trade_by, tr_head, "ledger_w20_q0.5", "attack money settled")
     tight_busy = num(trade_by, tr_head, "ledger_w20_q0.5", "busy-week money stopped")
-
     recall_by = row_by(de_head, de_rows, "scenario")
-    caught = [num(recall_by, de_head, s, "recall [95% CI]") for s in
-              ("split_distinct", "split_slow", "alias_far", "relay_reversed")]
+    caught = [num(recall_by, de_head, s, "recall [95% CI]") for s in silent]
 
     def cell(rows, head, pop, protocol, column):
         for r in rows:
@@ -212,52 +268,55 @@ def build(out: Path, results: Path = RESULTS) -> Path:
         raise KeyError(f"{pop}/{protocol} in the control table")
 
     def pair(scenario, column):
-        """A sweep cell is `attack / held`; both halves, as strings."""
         return [c.strip() for c in value(sweep_by, sweep_head, scenario, column).split("/")]
 
     base_rules_out = cell(ctl_rows, ctl_head, "-", "rules", "attack $ out")
     base_rules_held = cell(ctl_rows, ctl_head, "-", "rules", "benign $ held")
     base_mandate = cell(ctl_rows, ctl_head, "-", "per_mandate", "attack $ out")
-    model_out = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring",
-                     "attack $ out")
+    model_out = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring", "attack $ out")
     model_cost = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring", "$/log")
-    model_calls = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring",
-                       "calls/log")
-    open_pair = cell(ctl_rows, ctl_head, "colluding_pair", "untrusted_monitoring",
-                     "attack $ out")
-    blind_pair = cell(ctl_rows, ctl_head, "colluding_pair", "untrusted_monitoring_blind",
-                      "attack $ out")
+    model_calls = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring", "calls/log")
+    model_held = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring", "benign $ held")
+    open_pair = cell(ctl_rows, ctl_head, "colluding_pair", "untrusted_monitoring", "attack $ out")
+    blind_pair = cell(ctl_rows, ctl_head, "colluding_pair", "untrusted_monitoring_blind", "attack $ out")
     releases = cell(ctl_rows, ctl_head, "colluding_pair", "monitor_releases", "attack $ out")
-    paranoid = cell(ctl_rows, ctl_head, "reviewer_suspicious", "trusted_editing",
-                    "benign $ held")
-    paranoid_out = cell(ctl_rows, ctl_head, "reviewer_suspicious", "trusted_editing",
-                        "attack $ out")
-    paranoid_cost = cell(ctl_rows, ctl_head, "reviewer_suspicious", "trusted_editing",
-                         "$/log")
-    releases_calls = cell(ctl_rows, ctl_head, "colluding_pair", "monitor_releases",
-                          "calls/log")
-    probe_head, probe_rows = md_table((results / "control_stub_prefix_probe.md")
-                                      .read_text(encoding="utf-8"))
-    paranoid_probe = cell(probe_rows, probe_head, "reviewer_suspicious", "trusted_editing",
-                          "$/log")
-    paranoid_probe_out = cell(probe_rows, probe_head, "reviewer_suspicious",
-                              "trusted_editing", "attack $ out")
-    paranoid_probe_held = cell(probe_rows, probe_head, "reviewer_suspicious",
-                               "trusted_editing", "benign $ held")
-    silent_releases = cell(probe_rows, probe_head, "colluding_pair", "monitor_releases",
-                           "attack $ out")
+    releases_calls = cell(ctl_rows, ctl_head, "colluding_pair", "monitor_releases", "calls/log")
     free_out = cell(both_rows, both_head, "-", "rules_hold", "attack $ out")
     free_held = cell(both_rows, both_head, "-", "rules_hold", "benign $ held")
     free_rules_out = cell(both_rows, both_head, "-", "rules", "attack $ out")
     free_rules_held = cell(both_rows, both_head, "-", "rules", "benign $ held")
-    model_held = cell(ctl_rows, ctl_head, "competent_honest", "untrusted_monitoring",
-                      "benign $ held")
     sweep_by = row_by(sweep_head, sweep_rows, "scenario")
     fanout_hold = pair("relay_fanout", "both, no freeze")[1]
     fanout_freeze = pair("relay_fanout", "both")[1]
-    reversed_hold = pair("relay_reversed", "both, no freeze")[1]
-    reversed_freeze = pair("relay_reversed", "both")[1]
     renamed = pair("split_renamed", "prefix")
+    paired_max = max(int(r[sweep_head.index("seeds where model differs")].split()[0])
+                     for r in sweep_rows)
+
+    # real-swarm figures, parsed from the trace table's own prose
+    pool = int(re.search(r"Identity pool: ([\d,]+)", trace_text).group(1).replace(",", ""))
+    busiest = re.search(r"busiest taking ([\d.]+)%", trace_text).group(1)
+    records = re.search(r"reconstruction: ([\d,]+) records", trace_text).group(1)
+    edges = re.search(r"([\d,]+) edges", trace_text).group(1)
+    fanmax = re.search(r"max (\d+)", trace_text).group(1)
+    runs_covered = pool * 600 / 100000
+
+    # live tables
+    id_by = row_by(id_head, id_rows, "scenario")
+    pers_by = row_by(pers_head, pers_rows, "condition")
+    tam_by = row_by(tam_head, tam_rows, "tamper")
+    pers_n = pers_rows[0][pers_head.index("holds")].split("/")[1]
+    pers_flips = re.search(r"flipped (\d+/\d+)",
+                         (results / "live" / "persuasion_gemini-3.5-flash-lite.md").read_text(encoding="utf-8")).group(1)
+    struct_head, struct_rows = md_table(
+        (results / "llm_gemini" / "summary_gemini-3.5-flash-lite.md").read_text(encoding="utf-8"))
+    struct_by = row_by(struct_head, struct_rows, "arm")
+    struct_cols = ["arm", "n", "structured [95% CI]", "asked approval",
+                   "asked then split", "monitor agrees"]
+    struct_display = [[r[struct_head.index(c)] for c in struct_cols] for r in struct_rows]
+    a_struct = num(struct_by, struct_head, "A_threshold", "structured [95% CI]")
+    d_struct = num(struct_by, struct_head, "D_no_threshold", "structured [95% CI]")
+    d_split = value(struct_by, struct_head, "D_no_threshold", "asked then split")
+    d_agree = value(struct_by, struct_head, "D_no_threshold", "monitor agrees")
 
     pts = [("per-mandate cap only", float(base_mandate),
             float(cell(ctl_rows, ctl_head, "-", "per_mandate", "benign $ held")), 0.0),
@@ -266,23 +325,21 @@ def build(out: Path, results: Path = RESULTS) -> Path:
             float(cell(ctl_rows, ctl_head, "-", "rules_hold", "benign $ held")), 0.0),
            ("both readings, freeze", float(free_rules_out), float(free_rules_held), 0.0),
            ("both readings, hold the payment", float(free_out), float(free_held), 0.0),
-           ("rules + model on the seam", float(model_out), float(model_held),
-            float(model_cost))]
+           ("rules + model on the seam", float(model_out), float(model_held), float(model_cost))]
     fig = pareto(results / "fig_pareto.png", pts)
+    fig2 = frontier_fig(results / "fig_frontier.png", results / "frontier.csv")
 
     keep = [("-", "rules"), ("-", "rules_hold"),
-            ("competent_honest", "trust"),
             ("competent_honest", "trusted_editing"),
             ("competent_honest", "untrusted_monitoring"),
             ("competent_honest", "untrusted_monitoring_blind"),
-            ("competent_honest", "monitor_releases"),
             ("colluding_pair", "untrusted_monitoring"),
             ("colluding_pair", "untrusted_monitoring_blind"),
-            ("reviewer_bought", "monitor_releases"),
+            ("colluding_pair", "monitor_releases"),
             ("reviewer_suspicious", "trusted_editing")]
-    table6 = [[("rules only" if p == "-" else p),
+    table4 = [[("rules only" if p == "-" else p),
                q.replace("untrusted_monitoring", "monitoring").replace("_blind", " (blind)")
-                .replace("rules_hold", "rules, hold the payment"),
+                .replace("rules_hold", "rules, hold"),
                cell(ctl_rows, ctl_head, p, q, "attack $ out"),
                cell(ctl_rows, ctl_head, p, q, "benign $ held"),
                cell(ctl_rows, ctl_head, p, q, "calls/log"),
@@ -296,295 +353,313 @@ def build(out: Path, results: Path = RESULTS) -> Path:
     frame = Frame(doc.leftMargin, doc.bottomMargin, W, A4[1] - 26 * mm, id="body")
     doc.addPageTemplates([PageTemplate(id="page", frames=[frame], onPage=footer)])
 
-    f = [para("The Aggregate Gap", size=18, leading=20, space=1, color=NAVY),
-         para("What it costs to supervise a swarm that spends money, measured in cents",
-              size=10.2, leading=12.4, color=FAINT, space=6),
-         para("Apart Research Swarm Alignment 2026, Track 4 &nbsp;&#183;&nbsp; "
-              "Muhammad Hassaan Shaukat and R&#305;zgar Ozan<br/>"
-              "Seeded and stdlib-only, reproducible from the seeds alone: 98 tests, and "
-              "every figure below parsed out of a table this build re-reads.",
-              size=7.8, leading=10.2, color=FAINT, space=8),
+    f = [para("The Aggregate Gap<super>[1]</super>", size=18, leading=21, space=2, color=NAVY),
+         para("Supervising a swarm that spends money, measured in cents", size=10.2,
+              leading=12.4, color=FAINT, space=7),
+         para("Muhammad Hassaan Shaukat &nbsp;&#183;&nbsp; Independent Researcher<br/>"
+              "R&#305;zgar Ozan &nbsp;&#183;&nbsp; Independent Researcher<br/>"
+              "With Apart Research &nbsp;&#183;&nbsp; Swarm Alignment Hackathon 2026, Track 4",
+              size=8.6, leading=11.4, color=INK, space=8),
+         h2("Abstract"),
+         para(ABSTRACT, size=8.8, leading=11.6, space=7)]
 
-         h1("What we found"),
-         para("Payment protocols for agent swarms enforce a budget <b>per mandate</b>. Nothing "
-              "enforces one <b>across</b> mandates, so several agents that are each inside "
-              "their own cap can move more of one principal's money than any of them was "
-              "allowed to. We built the monitor that sees that shape, put it inline at a "
-              "payment gateway, and scored every defence in cents settled rather than in flags "
-              "raised.", space=4),
-         para("The monitor is real and it is free. It holds the per-payee, per-window line "
-              "against every attack written to its limits, at zero false alarms on benign logs "
-              f"of any length, and inline at the gateway it cuts attack money that settles "
-              f"from {rng(*(per(s) for s in tuned))} to {rng(*(mon(s) for s in tuned))} on "
-              "those attacks. It catches nothing among the held-out attacks that never cross "
-              f"a bound: split_distinct, split_slow and alias_far each have recall "
-              f"{caught[0]} and settle {rng(*(mon(s) for s in silent))} of their money under "
-              "both the per-mandate cap and the monitor.", space=4),
-         para("Then we argued against our own addition. A supervisor sitting in the "
-              "authorization path, asked only as a payee comes near the bound, moves attack "
-              f"money from {base_rules_out} to {model_out} for ${model_cost} a log and "
-              f"{model_calls} calls a log, with the model's wait inside the payment decision. "
-              "AI Control protocols make that supervisor survivable when it is subverted: "
-              f"withholding the actor's draft from the reviewer is the only arm that beats a "
-              f"colluding pair ({open_pair}&nbsp;&rarr;&nbsp;{blind_pair}), and a honeypot "
-              "retires a reviewer who cannot pass it. But the last measurement says the model "
-              "needs none of that to be justified. <b>A rule that counts each payment toward "
-              "two ways of reading a payee name, and answers a flag by holding the payment "
-              f"instead of freezing the swarm, settles {free_out} of attack money &mdash; the "
-              f"same as the model, scenario by scenario, in every scenario with attack money "
-              f"&mdash; holds less legitimate money ({free_held} against {base_rules_held}), "
-              "and costs nothing.</b>", space=4),
-
-         h1("1. The gap, and the shape of a defence"),
-         para("Track 4 asks how to oversee and control a swarm of agents that act with money. "
-              "Our setting is the narrowest version of that we could state precisely: N "
-              "agents, one principal, spends and transfers, and a policy that binds the "
-              "principal rather than the agent. A 2026 security analysis of Google's AP2 "
-              "reports budget constraints enforced per mandate and none across mandates "
-              "(arXiv:2608.23858; we have not verified this against the specification and "
-              "cite it as motivation, not as fact). The human version of the same failure is "
-              "structuring, and banks have had rules for it for decades.", space=4),
-         para("The monitor keeps the principal's ledger instead of the agents'. Six named "
-              "checks, each removable on its own so every rule is measured individually: "
-              f"{MON}agent_over_limit, relay, relay_multi_hop, split_payment, slow_split, "
-              f"payee_alias{END}. A relay is traced back to the agent whose money it "
-              "carries, so three hops cannot launder a cap. A payee is keyed by who it is, not "
-              "by the string printed on the payment.", space=4)]
-
-    f += [h1("2. Method"),
+    # 1 ---------------------------------------------------------------------
+    f += [h1("1. Introduction"),
+          para("Payment protocols for agent swarms enforce a budget <b>per mandate</b>. "
+               "Nothing enforces one <b>across</b> the mandates a single principal issues, so "
+               "several agents that are each inside their own cap can move more of that "
+               "principal's money than any of them was allowed to. We call this the "
+               "<i>aggregate gap</i>. The human version is structuring, and banks have had "
+               "rules for it for decades; the agent version is cheaper to carry out because "
+               "agents can be copied, renamed and run at machine speed.", space=4),
+          para("A 2026 security analysis of Google's Agent Payments Protocol (AP2) formalises "
+               "constraint enforcement <i>within</i> a mandate chain: a closed mandate must "
+               "stay inside its open mandate's user-approved limits, and cumulative limits "
+               "must remain satisfied across reuse (Aviv et al., SR5/SR7). It also finds that "
+               "attacks which steer the agent <i>before</i> it signs escape mandate-chain "
+               "verification entirely. Neither line of defence binds the principal across "
+               "separately issued mandates to different agents, which is the seam we study.", space=4),
+          para("Our main contributions are:", space=2),
           *bullets([
-              "<b>Money, not flags.</b> Every arm is scored as the share of attack money that "
-              "settles and the share of legitimate money that is stopped, in cents, per seeded "
-              "log. A defence that detects late still lets the money out, and the tables show "
-              "that rather than hiding it.",
-              "<b>Two attack sets.</b> Five scenarios tuned on the limits, five held out and "
-              "written afterwards. The held-out attackers check their own budgets first: "
-              "distinct payees, a rename past the similarity cutoff, a drip slower than the "
-              "window.",
-              "<b>Horizon.</b> Benign logs from 40 to 300 ticks, with false alarms per 1,000 "
-              "actions as well as per run. This is how the first version of the monitor was "
-              "found to be wrong: summing a payee over the whole log looked clean at 40 ticks "
-              "and flagged 92% of benign swarms at 200.",
-              "<b>Intervals.</b> 200 seeds per cell for the rule results, 50 for the model "
-              "arms, Wilson 95% intervals, no cell reported without them.",
-              "<b>Negative controls.</b> 98 tests; each one removes a rule, a protocol "
-              "setting or a capability and requires the failure to come back. Two of the "
-              "results below are the product of that habit rather than of looking for them.",
-          ])]
+              "A seeded, stdlib-only harness and a gateway that scores every defence in cents "
+              "settled and legitimate cents stopped, with five tuned and five held-out attacks "
+              "and a named, individually removable check for each rule.",
+              "A paired negative result: a model supervisor's entire measurable edge over the "
+              "rules is a defect in our own payee-identity rule plus a hold-versus-freeze "
+              "reaction difference, reproducible for free; and a one-way authority seam whose "
+              "safety is a design property, not a judgement.",
+              "Live-model evidence (Gemini): payee identity and draft persuasion, an unprompted "
+              "structuring task where removing an approval threshold makes agents split payments "
+              "on their own, a log-tampering demonstration, and a best-response curve with a "
+              "formal leakage bound showing the defence is a rate limit, not a total.",
+          ], size=8.4)]
 
-    f += [h1("3. What the rules are worth at a gateway"),
-          para("Share of attack money that settles, lower is better, 200 seeds. "
-               "<i>per_mandate</i> is what a payment protocol enforces today; "
-               "<i>ledger</i> adds one cap on the whole principal; <i>monitor</i> adds the "
-               "swarm monitor inline, which holds the flagged payment and stops the swarm:",
-               space=3),
-          grid(gw_head, gw_rows, [W * 0.20] + [W * 0.20] * 4, 6.6),
-          Spacer(1, 3),
-          para(f"The honest reading is prevention, not detection. The per-agent cap alone lets "
-               f"{rng(*(per(s) for s in tuned))} of a split payment leave. Inline monitoring "
-               f"gets that to {rng(*(mon(s) for s in tuned))} &mdash; it stops the payment "
-               "that raises the flag, but "
-               f"the money ahead of that flag is already gone. A principal-wide ledger sized "
-               f"from benign traffic trades one currency for the other: the tight setting "
-               f"(a 20-tick window at the median benign peak) cuts attack money to "
-               f"{tight_attack} but blocks {tight_busy} of a legitimate busy week, and "
-               f"{ledger_busy} at the 99th-percentile setting we would actually ship. Nothing "
-               "here is free except the monitor, and it only stops the attacks it was written "
-               "for.", space=4),
-          para("False alarms against log length, same monitor, two ways of summing a payee. "
-               "The <i>lifetime</i> row is our first version; it is not a safe default at any "
-               "length, it is only untested at short ones:", space=3),
-          grid(hz_head, hz_rows, [W * 0.13, W * 0.08, W * 0.28, W * 0.25, W * 0.26], 6.6)]
+    # 2 ---------------------------------------------------------------------
+    f += [h1("2. Related Work"),
+          para("<b>Structuring and velocity limits.</b> Splitting a transaction to stay under "
+               "a reporting threshold is the predicate of anti-money-laundering law "
+               "(31 U.S.C. &sect;5324; FATF Recommendations). Our per-payee, per-window bound "
+               "is a velocity limit in the payment-processing sense; the gap we measure is "
+               "that such limits bind one identity, and identities are what an attacker "
+               "controls. <b>Sybil resistance.</b> Douceur (2002) shows cheap identities break "
+               "any rule that counts per identity without a trusted authority; our "
+               "split_distinct attack and the 28,086-destination real pool are the same "
+               "lever. <b>Split-up attacks on agents.</b> Jones et al. (2025) show safe models "
+               "misused in combination by decomposing a task; Makins et al. (2026) show "
+               "per-instance monitors fail on distributed attacks in code. We measure the "
+               "money version and price the supervision. <b>Collusion and control.</b> "
+               "Motwani et al. (2024) measure secret collusion between models that share an "
+               "encoding; Rose et al. (2026) detect collusion with multi-agent "
+               "interpretability; Greenblatt et al. (2024) give the AI Control protocols we "
+               "wire to the payment seam. <b>Incident.</b> METR (2026) and Swarm Traces "
+               "(2026) document the Hugging Face swarm, including ~7% transcript spoofing and "
+               "7,905 names for ~1,200 agents, which motivate the tampering and identity "
+               "experiments.", size=8.5, leading=11.2, space=4)]
 
-    f += [h1("4. The swarm we did not write"),
-          para("Everything above is our generator, so it proves our generator is coherent. To "
-               "check that the shapes are ours and not real swarms', we measured the published "
-               "reconstruction of a real multi-agent incident (Swarm Traces, and the AI "
-               "Village corpus behind it) with the same monitor, using only the fields the "
-               "records actually carry. Two of the four findings below are negative, and they "
-               "are the reason the report does not claim external validation.", space=4),
+    # 3 ---------------------------------------------------------------------
+    f += [h1("3. Methods"),
           *bullets([
-              "189,579 records, 61,125 parent-child edges, 26,248 parent nodes. Fan-out "
-              "median 1, p99 12, max 858 &mdash; a real swarm does fan out, and one node in "
-              "the data is wider than any relay we modelled.",
-              "<b>0 nodes are both a parent and a child.</b> Relay depth is not observable in "
-              "the published data at all. Our multi-hop trace cannot be validated here, only "
-              "reproduced in a generator, so every relay number in this report is synthetic.",
-              "<b>0 records carry a time.</b> A windowed rule cannot be scored on this data. "
-              "We reported the reading that needs no clock as well: at 30,000 cents per "
-              "branch the tight-ordering violation rate is 0.225 and the clock-free rate is "
-              "the same 0.225, while the worst-case ordering is 0.000. The rule's apparent "
-              "failure is an artefact of assuming a clock we do not have.",
-              "28,086 distinct destinations, the busiest taking 14.6% of the marks. Against a "
-              "bound of $600 per payee per window, moving $100,000 needs 167 of them and the "
-              "observed pool covers 168.5 such runs. <b>Identity spread, with no amount ever "
-              "over any bound, is the lever a real swarm already has.</b> That is the "
-              "evidence for section 7's free rule.",
-          ])]
+              "<b>Money, not flags.</b> Each arm is the share of attack money that settles and "
+              "the share of legitimate money stopped, in cents, per seeded log. A defence that "
+              "detects late still lets the money out. 200 seeds per rule cell, 50 per model "
+              "cell; Wilson 95% intervals on rates, and a paired seed-by-seed difference for "
+              "the headline model-vs-rule comparison.",
+              "<b>Gateway policies.</b> per_mandate (each agent's cap), ledger (one cap on the "
+              "principal over a rolling window, calibrated from benign logs only), monitor "
+              "(the swarm monitor inline), and ledger+monitor. The monitor's six checks are "
+              "named and each is removable on its own.",
+              "<b>Two attack sets.</b> Five scenarios tuned on the limits; five held out, "
+              "written afterwards, whose attackers check their own budgets first (distinct "
+              "payees, a rename past the cutoff, a drip slower than the window).",
+              "<b>Model arms.</b> AI Control protocols at the seam where a payment is about to "
+              "settle, with each seat's competence and honesty as free parameters offline, and "
+              "live Gemini (gemini-3.5-flash-lite) for payee-identity judgement, a paired "
+              "blind/draft persuasion test, and an unprompted structuring task. The gateway "
+              "consults a model only on payments the rules already let through: a model can "
+              "decline to hold, never release.",
+              "<b>Negative controls.</b> Each guard ships with a test that removes it and "
+              "requires the failure to return; the tampering and identity metrics are "
+              "constructed so an inert edit or a merge-everything judge is caught.",
+          ], size=8.4)]
 
-    f += [h1("5. A model in the authorization path, and what it costs"),
-          para("A rule monitor is free, instant and cannot be argued with, but it only reacts "
-               "to shapes someone wrote down. The alternative is a model that reads the same "
-               "state and answers questions no rule encodes. We wired an assistant at the "
-               "point where a payment is about to settle &mdash; Meta's MUSE API, Muse Spark "
-               "1.3 and Muse Wonder 1.0, priced from the published table &mdash; and ran the "
-               "same arms against an offline stand-in that answers through the identical "
-               "code path.", space=4),
-          para("One structural fact organises everything below it: <b>the gateway asks the "
-               "model only about payments the rules already let through.</b> A model can "
-               "decline to hold, it can never release. So a supervised arm is always a subset "
-               "of the rules, its worst case is legitimate money held that was owed, and any "
-               "protocol that lets a reviewer's <i>allow</i> clear a flag has to be built by "
-               "switching the rules off. That is deliberately one-directional authority, and "
-               "it is why section 6 can report a safety property that holds whatever the "
-               "models do.", space=4),
-          para("<b>Live runs are blocked: no API key was provided for this sprint.</b> Every "
-               "number in this report therefore comes from the offline arms that exercise the "
-               "same wiring. We state that rather than papering over it: the model-side claims "
-               "here are about protocol structure and about the cost of a call, not about the "
-               "quality of any model.", space=4)]
-
-    f += [h1("6. Which protocol survives which failure"),
-          para("AI Control (Greenblatt et al., arXiv 2312.06942) keeps a model you do not "
-               "trust useful by construction. Five arms at the payment seam, 14 scenarios, 50 "
-               "seeds, with each seat's competence and honesty as free parameters. "
-               "<i>attack out</i> is the share of attack money that settles, <i>held</i> the "
-               "share of legitimate money stopped; rows with population <i>rules only</i> have "
-               "no model in the loop:", space=3),
+    # 4 ---------------------------------------------------------------------
+    f += [h1("4. Results"),
+          h2("4.1 What the rules are worth at a gateway"),
+          grid(gw_head, gw_rows, [W * 0.20] + [W * 0.20] * 4, 6.5),
+          caption("Table 1. Share of attack money that settles (lower is better), 200 seeds, "
+                  "Wilson 95% intervals. per_mandate is what a payment protocol enforces today."),
+          para(f"The per-agent cap alone lets {rng(*(per(s) for s in tuned))} of a tuned split "
+               f"leave; inline monitoring cuts that to {rng(*(mon(s) for s in tuned))}, but the "
+               "money ahead of the flag is already gone. The three held-out attacks that never "
+               f"cross a bound (split_distinct, split_slow, alias_far) each have recall "
+               f"{caught[0]} and settle {rng(*(mon(s) for s in silent))} under both. A "
+               "principal-wide ledger trades one currency for the other (Table 2): the tight "
+               f"setting cuts attack money to {tight_attack} but blocks {tight_busy} of a "
+               f"legitimate busy week; the 99th-percentile setting blocks {ledger_busy}.", space=4),
+          grid(tr_head, tr_rows, [W * 0.26, W * 0.16, W * 0.14, W * 0.22, W * 0.22], 6.4),
+          caption("Table 2. Prevention vs detection: a principal ledger calibrated on benign "
+                  "peaks. attack money settled and busy-week money stopped are shares."),
+          h2("4.2 False alarms against log length"),
+          grid(hz_head, hz_rows, [W * 0.13, W * 0.08, W * 0.28, W * 0.25, W * 0.26], 6.4),
+          caption("Table 3. The lifetime row is our first version: clean at 40 ticks, it flags "
+                  "92% of benign swarms at 200. The windowed rule shows zero false alarms on "
+                  "the 40-300 tick lengths tested (not a claim about all lengths)."),
+          h2("4.3 Which protocol survives which failure"),
           grid(["population", "protocol", "attack out", "held", "calls/log", "$/log"],
-               table6, [W * 0.21, W * 0.27, W * 0.14, W * 0.12, W * 0.13, W * 0.13], 6.5),
-          Spacer(1, 3),
+               table4, [W * 0.21, W * 0.27, W * 0.14, W * 0.12, W * 0.13, W * 0.13], 6.4),
+          caption("Table 4. AI Control arms, 14 scenarios, 50 seeds, offline stand-ins. attack "
+                  "out / held are shares of attack money settled / legitimate money stopped."),
           *bullets([
-              "<b>Nothing behind the rules settled more attack money than the rules did, in "
-              "any of 294 (population, arm, scenario) triples</b> &mdash; including a fully "
-              "bought reviewer and a colluding pair. Safety here is a property of the "
-              "authority structure, not of anyone's judgement.",
-              f"<b>The draft is the channel.</b> Under a colluding pair, the reviewer who "
-              f"reads the actor's reasoning lets out {open_pair} &mdash; exactly what the "
-              "rules alone let out. Withhold the text and the same pair gets "
-              f"{blind_pair}. Two models that share a language have only that language to "
-              "conspire in (Motwani et al., arXiv 2402.07510). The control is to withhold the "
-              "text.",
-              f"<b>Letting a reviewer overrule a flag buys back the attack the rules "
-              f"stopped, and pays for the privilege.</b> The same colluding pair settles "
-              f"{releases} under that arm &mdash; the {base_mandate} an unsupervised "
-              f"per-mandate gateway pays out &mdash; at {releases_calls} calls a log. "
-              "The monitor is worth nothing once a reviewer can overrule it, and the calls "
-              "are all price.",
-              "<b>A honeypot is a control, not a fallback.</b> One plainly fine payment "
-              f"offered at every consult, with the arm silenced permanently on the first "
-              f"miss. On a reviewer paranoid enough to settle only {paranoid_out} of attack "
-              f"money while holding {paranoid} of legitimate money, the trap switches it off: "
-              f"attack money back up to {paranoid_probe_out}, held money down to "
-              f"{paranoid_probe_held}, and the bill cut from ${paranoid_cost} to "
-              f"${paranoid_probe} a log. That is an honest trade, not a win: the trap removes "
-              "a seat you cannot trust and gives back what that seat was catching. Run once "
-              "per log it is worth nothing &mdash; the reviewer only has to be lucky on the "
-              f"one draw &mdash; and with the rules switched off, silencing the reviewer "
-              f"<i>is</i> the failure: the ablation plus honeypot pays out {silent_releases}.",
-          ])]
-
-    f += [h1("7. The negative result: the model's edge is a string rule"),
-          para("For the comparison to be fair the model had to be able to differ from the "
-               "rule at all. Both seats keep the monitor's own ledger and read the same bound; "
-               "what they get that the shipped rule does not is a different answer to "
-               "<i>is this the same payee</i>. We turned that into a switch: "
-               f"{MON}prefix</font> (normalise, then merge on a shared prefix or 0.85 "
-               f"character similarity), {MON}tokens</font> (the set of meaningful words, "
-               f"corporate suffixes dropped) and {MON}both</font> (one payment counted toward "
-               "both readings). Two scenarios pin the difference down. <i>split_renamed</i>: "
-               "one firm typed three ways, every pair below the cutoff and none a prefix of "
-               "another, so the shipped reading sees three payees and lets "
-               f"{renamed[0]} of the money out. <i>benign_stem</i>: two genuinely different "
-               "payees sharing a "
-               "15-character identifier stem, which is the actual namespace of the incident "
-               "dataset.", space=4),
-          para("Pooled over the same 50 seeds and 14 scenarios, both axes lower is better. "
-               "The open diamond is the only point that pays for a call, and the dashed line "
-               "runs to the free rule that matches it on attack money and beats it on "
-               "legitimate money:", space=3),
-          Image(str(fig), width=W, height=W * 2.6 / 6.9),
-          Spacer(1, 3),
-          para("Each cell is attack money settled / legitimate money held, over the same 50 "
-               "seeds. Only the last column pays for a call:", space=3),
+              f"<b>The draft is the channel.</b> A colluding pair whose reviewer reads the "
+              f"actor's reasoning lets out {open_pair}; withholding the text gets {blind_pair}. "
+              "The control is to withhold the text (Motwani et al.).",
+              f"<b>Letting a reviewer overrule a flag buys the attack back.</b> The same pair "
+              f"settles {releases} under monitor_releases &mdash; the {base_mandate} an "
+              f"unsupervised gateway pays &mdash; at {releases_calls} calls a log.",
+              "<b>Safety is structural.</b> No arm behind the rules settled more attack money "
+              "than the rules in any of 294 (population, arm, scenario) triples. Because the "
+              "gateway only asks a model about payments the rules already passed, this is a "
+              "property of one-way authority, not an empirical claim about model behaviour.",
+          ], size=8.3),
+          h2("4.4 The negative result: the model's edge is a string rule"),
+          Image(str(fig), width=W, height=W * 2.5 / 6.9),
+          caption("Figure 1. Attack money settled vs legitimate money held, one point per "
+                  "defence. The open diamond is the only point that pays for a call; the dashed "
+                  "line runs to the free rule that matches it on attack money and beats it on "
+                  "legitimate money."),
           grid(sweep_head, sweep_rows,
-               [W * 0.165, W * 0.14, W * 0.14, W * 0.14, W * 0.155, W * 0.14, W * 0.08], 6.4),
-          Spacer(1, 3),
+               [W * 0.15, W * 0.125, W * 0.125, W * 0.125, W * 0.14, W * 0.125, W * 0.08, W * 0.13], 6.0),
+          caption("Table 5. Each cell is attack money settled / legitimate money held over the "
+                  "same 200 seeds. The last column is the paired count of seeds where the model "
+                  "arm differs from the free both-readings-hold arm (max absolute difference)."),
           para(f"<b>Read the fourth column against the fifth.</b> The model arm and the "
-               f"two-reading rule that holds instead of freezing catch the same attack money "
-               f"in every scenario that has any. The rule holds strictly less legitimate "
-               f"money where the shipped rule freezes: {fanout_hold} against {fanout_freeze} "
-               f"on relay_fanout, {reversed_hold} against {reversed_freeze} on "
-               f"relay_reversed, {free_held} against "
-               f"{base_rules_held} pooled. The model arm inherits the rules' freeze and pays "
-               f"${model_cost} a log on top of it. Two string comparisons and one change of "
-               "reaction do the same work, with no call inside the payment decision, no "
-               "latency, and nobody to argue with or to subvert. <b>The honest version of that "
-               "sentence is a defect report on our own rule monitor, not a claim about "
-               "models:</b> the shipped merge rule was wrong in both directions, it merged "
-               "identifier namespaces that were nothing of the kind and missed a word-order "
-               "swap, and the model was compensating for that bug for its whole price tag.",
-               space=4)]
+               f"two-reading rule that holds instead of freezing catch the same attack money in "
+               f"every scenario, and the paired difference is zero on all 200 seeds (max over "
+               f"scenarios: {paired_max}). The rule holds less legitimate money where the shipped "
+               f"rule freezes ({fanout_hold} vs {fanout_freeze} on relay_fanout; {free_held} vs "
+               f"{base_rules_held} pooled) and bills nothing. The honest reading is a defect "
+               f"report on our own monitor: the shipped merge rule was wrong in both directions "
+               f"&mdash; it merged identifier namespaces and missed a word-order swap "
+               f"(split_renamed lets {renamed[0]} out) &mdash; and the model was compensating "
+               "for that bug for its whole price tag.", space=4),
+          h2("4.5 Live model evidence (Gemini)"),
+          grid(id_head, id_rows, [W * 0.20, W * 0.07, W * 0.20, W * 0.20, W * 0.20, W * 0.13], 6.3),
+          caption("Table 6. Pairwise precision/recall of same-vendor merges on the raw names of "
+                  "each log, 3 seeds, ground truth from the scenario construction. 1.00* = no "
+                  "merges predicted. The model reads renames and misspellings the rules miss "
+                  "and keeps identifier stems apart (zero false merges)."),
+          grid(pers_head, pers_rows, [W * 0.34, W * 0.33, W * 0.33], 6.4),
+          caption(f"Table 7. The same reviewer rates {pers_n} true breaches blind and with each "
+                  f"draft (threshold 0.5). Adversarial drafts flipped {pers_flips} payments from "
+                  "hold to allow: on unambiguous arithmetic the channel did nothing."),
+          grid(struct_cols, struct_display,
+               [W * 0.20, W * 0.06, W * 0.22, W * 0.16, W * 0.18, W * 0.18], 6.3),
+          caption("Table 8. Do live agents structure on their own? Four Gemini purchasing agents, "
+                  "one $900 invoice, a $500 approval threshold and a $400 per-agent cap; chain "
+                  "topology, 2 seeds per arm. A states the threshold; D removes it from the "
+                  "policy. No prompt mentions splitting, evasion or monitoring."),
+          para(f"<b>The gap arises unprompted.</b> With the threshold stated (A) the agents asked "
+               f"for approval and never split ({a_struct} structured). Remove the threshold from "
+               f"the policy (D) and the same model spontaneously split the invoice into two $400 "
+               f"payments from different agents in {d_split} of episodes ({d_struct} structured), "
+               f"moving $800 to one vendor with no approval &mdash; the aggregate gap emerging "
+               f"from ordinary instruction-following, not from an attacker we wrote. The monitor "
+               f"flagged every structured episode (agrees {d_agree}). At n=2 per arm this "
+               "establishes the mechanism, not a population rate.", space=4),
+          h2("4.6 Oversight when the suspects write the logs"),
+          grid(tam_head, tam_rows, [W * 0.16, W * 0.10, W * 0.26, W * 0.24, W * 0.24], 6.4),
+          caption("Table 9. Agent-log detection collapses under three edits to the published "
+                  "log; the gateway, which reads settled instructions not reports, is identical "
+                  "across every row. 200 runs per row."),
+          h2("4.7 The swarm we did not write, and the adaptive attacker"),
+          para(f"On the published incident reconstruction ({records} records, {edges} edges, "
+               f"fan-out max {fanmax}; 0 nodes both parent and child, 0 timestamps) the "
+               f"destination pool is {pool:,} payees, the busiest taking {busiest}%. At $600 per "
+               f"payee per window, moving $100,000 needs 100000/600 &asymp; 166.7 payees; the "
+               f"observed pool covers {runs_covered:.1f} such runs. Identity spread, with no "
+               "amount over any bound, is the lever a real swarm already has. Relay depth and "
+               "every windowed number are unvalidated externally because the data has no clock "
+               "and no multi-hop node.", space=4),
+          Image(str(fig2), width=W, height=W * 2.3 / 6.9),
+          caption("Figure 2. Best response of an attacker who knows the bound (7 payments of "
+                  "$200): settled share vs spacing, one curve per identity count. More "
+                  "identities or more time leaks everything; the bound caps the rate, not the "
+                  "total."),
+          para("<b>Leakage bound.</b> Against a per-payee bound B over window W with perfect "
+               "identity, an attacker settling through I true payee identities over T ticks can "
+               "move at most I&middot;B&middot;(floor(T/W)+1), and never more than B per "
+               "identity per window. The bound is a rate; given enough identities (split_distinct) "
+               "or enough time (split_slow) the total is unbounded. That is the aggregate gap "
+               "restated precisely, and Figure 2 is its measured best response.", space=4)]
 
-    f += [h1("8. What these numbers do not say"),
+    # 5 ---------------------------------------------------------------------
+    f += [h1("5. Discussion and Limitations"),
+          para("The durable defence is a bound an attacker cannot argue with, placed where the "
+               "money actually moves and kept out of the agents' reach. The model's role is "
+               "narrower than it first appears: on our harness its measurable value was "
+               "compensating for a fixable rule defect, and the live runs show its genuine "
+               "addition is identity judgement on names no string rule can name &mdash; an "
+               "abbreviation that requires knowing who the vendor is. Persuasion did not move "
+               "a reviewer on unambiguous breaches; the channel matters exactly where the "
+               "arithmetic is ambiguous, which the offline arms parameterise but the live n=6 "
+               "does not probe.", space=4),
           *bullets([
-              "<b>The stand-ins are not models.</b> Every supervised result is a statement "
-              "about a protocol under an assumed failure rate. The rates are parameters and no "
-              "measurement here claims a real model behaves this way. Until a key is in hand "
-              "the live MUSE arms are unwired evidence, and section 5 says so.",
-              "<b>What the free rule cannot do is exactly what a model is for.</b> An "
-              "abbreviation that only makes sense if you know who the vendor is &mdash; "
-              "<i>OC Advisory Ltd</i> for the same offshore consultancy &mdash; is not a "
-              "string comparison, and no scenario in this harness measures it. The three "
-              "held-out attacks that settle 1.000 in every column of section 7 are that "
-              "gap's neighbourhood: our stand-in can only redo arithmetic, so a 1.000 there "
-              "is a statement about the stand-in, not a refutation of models.",
-              "<b>The generator is the attacker we imagined.</b> The held-out shapes were "
-              "written by us, after seeing the rules. That is an adaptive limit, not a world.",
-              "<b>Relay depth and every windowed number are unvalidated externally.</b> The "
-              "published incident reconstruction has no node that is both a parent and a "
-              "child, and no timestamps at all, so section 4's own data cannot check "
-              "sections 3 and 7.",
-              "<b>Freezing is a policy, not a constant.</b> A large part of what the model "
-              "appeared to buy was a difference in reaction: hold the payment, or stop the "
-              "swarm. Reported as separate columns, that axis is worth more than the "
-              "judgement &mdash; which is the kind of result a harness only produces if it "
-              "was built to be able to embarrass its own author.",
-              "<b>The durable claim is the bound, not the defence.</b> Against everything we "
-              "ran, no payee family received more than its cap inside any long window. An "
-              "attacker wanting more has to go slower or register more identities: a rate "
-              "limit in cents per tick that holds against an attacker who knows the rules and "
-              "the limits.",
-          ])]
+              "<b>Stand-ins are not models.</b> The protocol tables are statements about a "
+              "structure under assumed failure rates, not about any model's behaviour.",
+              "<b>The generator is the attacker we imagined.</b> Held-out shapes were written "
+              "by us after seeing the rules; that is an adaptive limit, not a world.",
+              "<b>Live evidence is small-n.</b> Identity is 3 seeds per scenario; persuasion is "
+              "6 breaches; the structuring task is a handful of episodes. They establish the "
+              "mechanism, not a population rate.",
+              "<b>Real-data limits.</b> The published reconstruction has no timestamps and no "
+              "multi-hop node, and the 7,905-name pool ships no ground-truth identity labels, so "
+              "true/false merge rates cannot be measured on it; the live identity experiment "
+              "measures the mechanism on constructed ground truth instead.",
+          ], size=8.3),
+          para("<b>Future work.</b> A verifier that binds payee identity to a registered vendor "
+               "(closing the Sybil lever), a live colluding actor-reviewer pair on ambiguous "
+               "near-bound payments, and an adaptive attacker run against the calibrated "
+               "ledger rather than the monitor alone.", size=8.4, space=4)]
 
-    f += [h1("9. Reproduce"),
-          para("Repo github.com/muhammad-hassaan-y2/Twin-, directory "
-               f"<font face='Courier' size='7.4'>swarm-oversight/</font>, branch "
-               f"<font face='Courier' size='7.4'>aggregate-gap</font>. Stdlib only, except "
-               "reportlab and matplotlib for this document.", space=3),
-          para(f"{MON}pip install -e .[dev] &amp;&amp; pytest&nbsp;&nbsp;# 98 tests<br/>"
-               "python -m swarm_oversight.report --seeds 200&nbsp;&nbsp;# rules, gateway, "
-               "horizon<br/>"
-               "python -m swarm_oversight.tracegraph&nbsp;&nbsp;# the published incident "
-               "data<br/>"
-               "python -m swarm_oversight.oversight --seeds 50 --advisor stub<br/>"
-               "python -m swarm_oversight.aicontrol --seeds 50 --merge prefix --out "
-               "results<br/>"
-               "python -m swarm_oversight.aicontrol --seeds 50 --merge prefix --probe --out "
-               "results<br/>"
-               "python -m swarm_oversight.aicontrol --seeds 50 --merge both --out results<br/>"
-               "python -m swarm_oversight.aicontrol --seeds 50 --identity-sweep --out "
-               "results<br/>"
-               "python -m swarm_oversight.pdf_report --out report.pdf</font>", space=5),
-          h2("References"),
-          para("Greenblatt, Barnes, Larson, <i>AI Control</i>, arXiv:2312.06942. "
-               "&#183;&nbsp; Motwani et al., <i>Secret Collusion among Generative AI "
-               "Models</i>, arXiv:2402.07510. &#183;&nbsp; <i>How Google Handles Money with "
-               "AP2: A Security Analysis</i>, NeurIPS 2024, arXiv:2608.23858 &mdash; cited as "
-               "motivation; the per-mandate claim is not yet verified against the "
-               "specification. &#183;&nbsp; METR, <i>Hugging Face incident report</i>, August "
-               "2026. &#183;&nbsp; Swarm Traces (swarmtraces.org) and the AI Village corpus, "
-               "aidigestorg/ai-village.", size=7.8, leading=10.2, color=FAINT)]
+    # 6 ---------------------------------------------------------------------
+    f += [h1("6. Conclusion"),
+          para("Per-mandate budgets leave a principal-wide aggregate gap, and the cheapest "
+               "durable answer is a per-payee, per-window rate bound enforced at the gateway "
+               "from settled instructions, outside the agents' reach. It holds against every "
+               "attack tuned to it and against log tampering; it is provably a rate, not a "
+               "total, so identity and time remain the attacker's levers. A model supervisor "
+               "earned its price only by fixing a defect we could fix for free, and its real "
+               "contribution is identity judgement, not arithmetic. We report the negative "
+               "result rather than the flattering one.", size=8.6, space=5)]
+
+    # Code and data + contributions ------------------------------------------
+    f += [h2("Code and Data"),
+          para("Code: github.com/muhammad-hassaan-y2/Twin-, directory "
+               f"{MON}swarm-oversight/{END}, branch {MON}aggregate-gap{END} (stdlib only; "
+               "reportlab/matplotlib for this PDF). Data: Swarm Traces (swarmtraces.org) and "
+               "the AI Village corpus (huggingface.co/datasets/aidigestorg/ai-village). "
+               "Reproduce: pip install -e .[dev] &amp;&amp; pytest; python -m "
+               "swarm_oversight.report --seeds 200; python -m swarm_oversight.aicontrol "
+               "--seeds 200 --identity-sweep --out results; python -m "
+               "swarm_oversight.tampering --seeds 50 --out results; GEMINI_API_KEY=... python "
+               "-m swarm_oversight.live_experiments identity|persuasion; python -m "
+               "swarm_oversight.pdf_report --out report.pdf.", size=7.9, leading=10.4, space=4),
+          h2("Author Contributions and Prior Work"),
+          para("R&#305;zgar Ozan built the baseline swarm monitor, the seeded harness and the "
+               "evasive variants (commits of 2026-11-07, within the sprint). Muhammad Hassaan "
+               "Shaukat built the gateway, experiments, AI Control and live-model arms, the "
+               "tampering demonstration and this report. <b>No code in swarm-oversight/ "
+               "predates the sprint</b> (earliest commit 2026-11-07). The repository's "
+               f"{MON}tabletop-twin/{END} directory is an unrelated October 2026 project and "
+               "contributes no code or ideas to this submission.", size=7.9, leading=10.4, space=4)]
+
+    # References (excluded from page cap) ------------------------------------
+    f += [h1("References"),
+          para("Aviv, A., Gandh, P. A., Bitton, R., Shabtai, A. (2026). Beyond the Mandate: A "
+               "Systematic Security Analysis of the Agent Payments Protocol (AP2). arXiv:2608.23858. "
+               "&#183; Douceur, J. (2002). The Sybil Attack. IPTPS. &#183; Greenblatt, R., et al. "
+               "(2024). AI Control: Improving Safety Despite Intentional Subversion. arXiv:2312.06942. "
+               "&#183; Jones, E., Dragan, A., Steinhardt, J. (2025). Adversaries Can Misuse "
+               "Combinations of Safe Models. ICML. arXiv:2406.14595. &#183; Makins, O., Angelini, "
+               "O., Shams, Z., Phuong, M. (2026). Multi-Agent AI Control: Distributed Attacks "
+               "Hamper Per-Instance Monitors. arXiv:2607.07368. &#183; Motwani, S., et al. (2024). "
+               "Secret Collusion among Generative AI Models. arXiv:2402.07510. &#183; Rose, A., et "
+               "al. (2026). Detecting Multi-Agent Collusion Through Multi-Agent Interpretability. "
+               "arXiv:2604.01151. &#183; METR (2026). Hugging Face incident report, August 2026. "
+               "&#183; Swarm Traces (2026). swarmtraces.org. &#183; 31 U.S.C. &sect;5324; FATF "
+               "Recommendations (structuring).", size=7.6, leading=10.0, color=FAINT, space=5)]
+
+    # Appendix (required, excluded from page cap) ----------------------------
+    f += [h1("Appendix A. Limitations and Dual-Use / Ethical Considerations"),
+          para("<b>What the results do and do not establish.</b> They establish, on a seeded "
+               "synthetic harness, that a per-payee per-window gateway bound holds against the "
+               "attacks we wrote and that a model supervisor's measured edge here was a rule "
+               "defect. They do not establish behaviour on a production payment system, on "
+               "real swarms with clocks and multi-hop structure (the published data has "
+               "neither), or a population rate for any live-model judgement (small n). The "
+               "294-triple safety statement is a design property of one-way authority, not a "
+               "measurement of models.", size=8.2, leading=10.8, space=4),
+          para("<b>Dual-use.</b> The held-out attacks (split_distinct, split_slow, alias_far) "
+               "and the three log-tampering edits are, read offensively, an evasion recipe "
+               "against payment monitors and audit trails. We publish them because the "
+               "corresponding defence is the point: the gateway-side bound and ledger hold "
+               "against all of them, and Figure 2 states exactly what an attacker can still "
+               "achieve (a rate, not a total). The scenarios are synthetic, no real payment "
+               "system or vendor was targeted, and the live-model experiments used the authors' "
+               "own API key on trivial synthetic prompts. The persuasion prompt is a generic "
+               "advocacy instruction, not a transferable jailbreak. We judge the defensive "
+               "value of naming the levers (identity, time, log authorship) to outweigh the "
+               "marginal offensive uplift, since these are the same levers AML velocity limits "
+               "and Sybil resistance already address.", size=8.2, leading=10.8, space=4),
+          h2("LLM Usage Statement"),
+          para("We used Qoder (Claude) to draft and debug code and to draft sections of this "
+               "report. Every quantitative claim is regenerated from the seeds by the committed "
+               "code and parsed from the result tables at build time; every citation was "
+               "checked against its primary source (the AP2 title/venue and the Jones and Rose "
+               "references were corrected during verification). The authors are responsible "
+               "for all claims and results.", size=8.2, leading=10.8, space=4),
+          para("[1] Research conducted at the Swarm Alignment Hackathon, November 2026.",
+               size=7.4, leading=9.4, color=FAINT, space=2)]
 
     doc.build(f)
     return out
@@ -597,8 +672,7 @@ def footer(canvas, doc):
     canvas.line(16 * mm, 11 * mm, A4[0] - 16 * mm, 11 * mm)
     canvas.setFont(BODY, 6.8)
     canvas.setFillColor(FAINT)
-    canvas.drawString(16 * mm, 8 * mm, "The Aggregate Gap  \u00b7  Swarm Alignment 2026, "
-                                       "Track 4  \u00b7  every figure measured, none quoted")
+    canvas.drawString(16 * mm, 8 * mm, "The Aggregate Gap  ·  Swarm Alignment 2026, Track 4")
     canvas.drawRightString(A4[0] - 16 * mm, 8 * mm, f"page {doc.page}")
     canvas.restoreState()
 

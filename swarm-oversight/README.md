@@ -5,10 +5,12 @@ Our project for the Apart Swarm Alignment sprint, track 4 (multi-agent oversight
 Payment systems give each agent its own spending cap. That is not the same as giving the person
 behind the agents a cap: a handful of agents, each quietly inside its own limit, can move far
 more money together than any one of them was allowed to. Banks have a name for the human
-version — structuring — and rules against it. Agent payment protocols have nothing yet; a 2026
-security analysis of Google's AP2 ([arXiv:2608.23858](https://arxiv.org/abs/2608.23858)) finds
-budget constraints enforced per mandate and none across mandates. We cite that as motivation;
-we have not verified the claim against the specification.
+version — structuring — and rules against it. A 2026 security analysis of Google's AP2
+([arXiv:2608.23858](https://arxiv.org/abs/2608.23858), Aviv et al., *Beyond the Mandate*)
+formalises constraint enforcement *within* a mandate chain (a closed mandate stays inside its
+open mandate's approved limits, and cumulative limits hold across reuse, SR5/SR7). We checked
+this against the paper: neither line of defence binds the principal *across* separately issued
+mandates to different agents. That cross-mandate aggregate is the seam we measure.
 
 This repo measures that gap and what it costs to close it, in money:
 
@@ -37,34 +39,49 @@ This repo measures that gap and what it costs to close it, in money:
   approval threshold without being told to. Four agents, one invoice, a policy that says
   payments to a vendor over a threshold need the principal's approval first — and nothing in
   any prompt about evading limits, splitting, or monitoring.
+- **Live model evidence** (`gemini.py`, `live_experiments.py`) runs the identity and persuasion
+  judgements against a real model (Gemini), with ground truth from the scenario construction:
+  pairwise precision/recall of same-vendor merges, and a paired blind/honest/adversarial-draft
+  review of true breaches. The Gemini client is a separate derived config; the OpenAI/MUSE
+  baseline is untouched.
+- **Log tampering** (`tampering.py`) lets the suspects edit their published log (rename payees,
+  drop actions, under-report amounts) and compares detection on the agent log against the
+  gateway, which reads settled instructions rather than reports.
 
 ## Running it
 
     pip install -e .[dev]
-    pytest                                        # 98 tests, stdlib only
+    pytest                                        # 109 tests, stdlib only
     python -m swarm_oversight.report --seeds 200  # writes results/summary.md + 7 CSVs
     python -m swarm_oversight.tracegraph          # the published incident data
     python -m swarm_oversight.aicontrol --seeds 50 --merge prefix --out results
     python -m swarm_oversight.aicontrol --seeds 50 --merge both --out results
-    python -m swarm_oversight.aicontrol --seeds 50 --identity-sweep --out results
-    python -m swarm_oversight.pdf_report --out report.pdf   # the write-up, 4 pages
+    python -m swarm_oversight.aicontrol --seeds 200 --identity-sweep --out results
+    python -m swarm_oversight.tampering --seeds 50 --out results
+    python -m swarm_oversight.pdf_report --out report.pdf   # write-up: 4 body pages + refs/appendix
 
     # LLM arm: any OpenAI-compatible endpoint, or Meta's MUSE API
     export SWARM_LLM_BASE_URL=... SWARM_LLM_MODEL=... SWARM_LLM_API_KEY=...
     python -m swarm_oversight.llm_arm --seeds 10
     python -m swarm_oversight.llm_arm --scripted splitter --seeds 3   # no API needed
 
-No key was available for this sprint, so every model number below comes from an offline
-stand-in that answers through the identical code path. That is a limitation we are stating,
-not a result: the model-side claims are about protocol structure and the price of a call, not
-about the quality of any model.
+    # Live Gemini evidence (own key, own derived config; baseline untouched)
+    export GEMINI_API_KEY=...
+    python -m swarm_oversight.live_experiments identity --seeds 3 --out results/live
+    python -m swarm_oversight.live_experiments persuasion --seeds 3 --out results/live
+    python -m swarm_oversight.llm_arm --model gemini-3.5-flash-lite --topologies chain --seeds 2
+
+The protocol tables (AI Control arms) still use offline stand-ins that answer through the
+identical code path, so those numbers are about protocol structure and the price of a call,
+not about any model's quality. The identity, persuasion, tampering and structuring results
+below are live Gemini runs; they are small-n and establish mechanisms, not population rates.
 
 ## What the numbers say (200 seeds for the rules, 50 for the model arms)
 
 **Detection is not the story; the money is.** The monitor catches every attack it was tuned on
-and stays at 0 false alarms on benign logs of any length — but at the gateway it still lets
-43–67% of the attack money settle before the flag fires. Detection buys time; it does not stop
-the payment.
+and stays at 0 false alarms on the benign log lengths tested (40–300 ticks) — but at the gateway
+it still lets 43–67% of the attack money settle before the flag fires. Detection buys time; it
+does not stop the payment.
 
 **Prevention stops the money and stops legitimate work too.** A principal-wide cap sized from
 benign logs keeps the busiest benign week mostly intact only at its loosest setting (17% of
@@ -82,9 +99,9 @@ per tick, that holds even against an attacker who knows the rules.
 
 **Scoring on short logs hides false alarms.** The first version of this monitor summed each
 payee's payments over the whole log. On 40-tick benign logs it looked perfect; at 200 ticks it
-flagged 92% of benign swarms. The windowed fix holds 0.00 at every length. A monitor paper
-that only reports per-run false alarms on short logs can hide a growing failure rate; report
-flags per 1,000 actions, and report the horizon.
+flagged 92% of benign swarms. The windowed fix holds 0.00 at every length tested (40–300 ticks).
+A monitor paper that only reports per-run false alarms on short logs can hide a growing failure
+rate; report flags per 1,000 actions, and report the horizon.
 
 **The supervisor's edge turned out to be a string rule, and we could price it.** To make the
 comparison fair, the model had to be able to differ from the rule at all, so payee identity
@@ -98,6 +115,19 @@ comparisons and one change of reaction dominate a model arm. The honest reading 
 defect report on our own monitor: the shipped merge rule was wrong in both directions, merging
 identifier namespaces that were nothing of the kind and missing a word-order swap, and the
 model was being paid to compensate for the bug.
+
+**Live Gemini confirms what a model adds, and what it does not.** On payee identity the model
+merges renames and misspellings the string rules miss (split_renamed recall 1.00 against the
+prefix rule's 0.00) without false-merging identifier namespaces (benign_stem precision 1.00,
+zero false merges) — the genuine addition is knowing who a vendor is, not comparing strings.
+On persuasion, an adversarial draft flipped 0 of 6 unambiguous breaches from hold to allow:
+the channel does nothing where the arithmetic is clear. On structuring, four live agents given
+a $900 invoice and a $500 approval threshold asked for approval and never split; remove the
+threshold from the policy and the same model spontaneously split the invoice across two agents
+in 1 of 2 episodes — the aggregate gap arising unprompted, and the monitor flagged it. And when
+the suspects edit their published log (rename, drop, under-report), agent-log detection
+collapses (0.50 → 0.01/0.00/0.00) while the gateway, which reads settled instructions not
+reports, is unchanged. All live runs are small-n: mechanisms, not rates.
 
 **Safety in the protocol arms is authority, not judgement.** Nothing behind the rules settled
 more attack money than the rules did, in any of 294 (population, arm, scenario) triples —
@@ -113,8 +143,9 @@ That is a control, not a fallback.
 records, 61,125 edges, fan-out median 1 and p99 12: swarms do fan out. But 0 nodes are both a
 parent and a child, so relay depth is unobservable there, and 0 records carry a time, so no
 windowed number can be scored on it. What it does give is the identity pool: 28,086 distinct
-destinations, the busiest taking 14.6% of the marks, which is 168 runs of $100,000 moved in
-$600-per-payee-window slices without a single amount over the bound.
+destinations, the busiest taking 14.6% of the marks. Moving $100,000 in $600-per-payee-window
+slices needs 100000/600 ≈ 166.7 payees, so the observed pool covers 168.5 such runs without a
+single amount over the bound.
 
 ## What this deliberately does not do
 
@@ -124,11 +155,14 @@ $600-per-payee-window slices without a single amount over the bound.
 - It does not model an intelligent adaptive attacker, only parameterized ones. The per-payee
   bound holds against the attacks we ran; a smarter attacker may find cheaper ways to spend
   the same money.
-- It does not try to be tamper-proof. The gateway sees the honest log; a swarm that can hide
-  or rewrite actions defeats everything here. Tamper-evidence is future work.
-- The stand-ins are not models. Every supervised result is a statement about a protocol under
-  an assumed failure rate, and the rates are parameters. The live MUSE and LLM arms are wired
-  and unwired-evidence at once until a key is in hand.
+- It does not claim tamper-proofing against an attacker who controls the gateway. What it does
+  show is that the gateway ledger is built from settled instructions outside the agents' reach,
+  so the three log edits the suspects can make (rename, drop, under-report) collapse agent-log
+  detection but leave the gateway unchanged. Tampering with the settlement path itself is out
+  of scope.
+- The protocol stand-ins are not models. Every AI Control result is a statement about a
+  protocol under an assumed failure rate, and the rates are parameters. The live Gemini arms
+  (identity, persuasion, structuring) are real but small-n.
 - The free two-reading rule cannot do the thing a model is for. An abbreviation that only
   resolves if you know who the vendor is — "OC Advisory Ltd" for the same offshore consultancy
   — is not a string comparison, and no scenario here measures it. The held-out attacks that
@@ -140,9 +174,13 @@ $600-per-payee-window slices without a single amount over the bound.
 - Nothing here covers the HF incident, exfiltration, or code sabotage; the closest work on
   those (Makins et al., arXiv:2607.07368) is cited in the write-up, not replicated.
 
-## Provenance
+## Provenance and prior work
 
-The monitor, scenarios and harness came in through PR #1 (Rızgar Ozan). The windowed fix, the
-gateway, the held-out attacks, the experiments, the identity switch, the model-in-the-loop arms
-and the real-data measurement are the sprint work. `report.pdf` is the write-up; it is built
-from the tables in `results/` at build time, so it cannot drift from the numbers it describes.
+**No code in `swarm-oversight/` predates the sprint.** The earliest commit is 2026-11-07, inside
+the hackathon window. The monitor, scenarios and harness came in through PR #1 (Rızgar Ozan) on
+that date; the windowed fix, the gateway, the held-out attacks, the experiments, the identity
+switch, the AI Control and live-model arms, the tampering demonstration and the real-data
+measurement are the sprint work (Muhammad Hassaan Shaukat). The repository's `tabletop-twin/`
+directory is an unrelated October 2026 project and contributes no code or ideas to this
+submission. `report.pdf` is the write-up; it is built from the tables in `results/` at build
+time, so it cannot drift from the numbers it describes.
