@@ -1,0 +1,36 @@
+# Git and editor state
+.git
+**/.git
+**/.qoder
+**/.commandcode
+**/.zed
+**/.DS_Store
+
+# Dependencies and build output
+**/node_modules
+**/dist
+**/out
+**/.out
+**/*.tsbuildinfo
+**/*.log
+
+# Local environment, secrets and runtime state
+**/.env
+**/.secrets
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.iwsdk
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# Generated local CA. Run examples/common/certs/generate_ca.sh first.
+examples/common/certs/ca.crt
+examples/common/certs/ca.key
+
+# Not needed for live updates
+**/specs
+**/references
+**/.playwright-mcp

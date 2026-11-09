@@ -17,3 +17,12 @@ model.
 Start with [tabletop-twin/README.md](tabletop-twin/README.md) for what it is and how
 to run it, and [tabletop-twin/backend/README.md](tabletop-twin/backend/README.md)
 for what the service guarantees.
+
+## Development
+
+Requires Docker and Tilt.
+
+```sh
+examples/common/certs/generate_ca.sh
+tilt up
+```

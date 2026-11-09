@@ -1,0 +1,6 @@
+# Generated local CA for the Tilt environment
+examples/common/certs/ca.crt
+examples/common/certs/ca.key
+
+# Local env overrides
+examples/postgres/.env
