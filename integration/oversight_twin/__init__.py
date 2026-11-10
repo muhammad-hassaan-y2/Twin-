@@ -1,12 +1,4 @@
-"""The integration layer between the two projects in this repository.
-
-tabletop-twin settles one principal's money through a real payment state machine
-and a transport (PayPal Orders v2, or a deterministic sandbox). swarm-oversight
-measures the aggregate gap: per-mandate ceilings do not bind the principal across
-mandates. This package joins them at the settlement seam without editing either
-baseline -- importing it puts both on the path so the bridge can import
-``twin.payments`` and ``swarm_oversight`` from a checkout, no installation needed.
-"""
+"""PayPal-centred settlement joining the twin and principal-wide oversight."""
 from __future__ import annotations
 
 import sys
@@ -20,5 +12,7 @@ for _p in (_ROOT / "tabletop-twin" / "backend", _ROOT / "swarm-oversight"):
         sys.path.insert(0, _s)
 
 from .bridge import Oversight, OversightTransport, SwarmOversight, record_action
+from .hub import Agreement, HumanGate, PayPalHub, Settlement, firm_agreements
 
-__all__ = ["Oversight", "OversightTransport", "SwarmOversight", "record_action"]
+__all__ = ["Oversight", "OversightTransport", "SwarmOversight", "record_action",
+           "Agreement", "HumanGate", "PayPalHub", "Settlement", "firm_agreements"]

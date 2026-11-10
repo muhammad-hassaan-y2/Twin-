@@ -1,56 +1,105 @@
-# Oversight Twin — the integration
+# Oversight Twin
 
-The seam that joins the two projects in this repository into one system. It is
-additive: neither **tabletop-twin** nor **swarm-oversight** is modified.
+A PayPal-centred settlement hub for the twin's audit, tax and finance agents.
+One payment machine and one principal-wide swarm monitor sit behind every fee.
+The chain records agreements; PayPal handles the payment, not the legal opinion.
+This branch extends tabletop-twin without changing swarm-oversight.
 
-## Why these two belong together
+## Settlement
 
-tabletop-twin settles one principal's money through a real payment state machine
-and a real transport — PayPal Orders v2, or a deterministic sandbox. Every payment
-is individually approved and can sit under its own ceiling. swarm-oversight's
-thesis is that per-mandate ceilings do not bind the principal *across* mandates:
-several agents, each inside its own limit, can move more to one payee together
-than any one was allowed. That is the aggregate gap.
+Binding findings become payment instructions. With a contract bus, the firm first
+proposes, accepts and attests the agreements on the local EVM. The hub uses their
+actual chain IDs and amounts, requires both explicit caller clearance and the
+recorded counterparty's countersignature, then submits through swarm oversight.
+Only a confirmed PayPal capture allows the chain agreement to become settled.
+A lost chain-write reply stays pending for reconciliation; it never causes another payment.
 
-The twin is the real settlement path; swarm-oversight is the principal-wide
-defence. Joined, the twin's settlement gains the cross-mandate aggregate bound it
-could not enforce on its own.
+Without a bus, the same hub accepts simulated instructions for tests. Those IDs
+are not chain records. Keep one hub instance per principal and currency: repeated
+or concurrent calls reuse its payment record, and changed terms under an existing
+ID are refused. Unknown outcomes permit lookup, not another charge.
 
-## The seam
+## EU evidence
 
-The integration wraps the twin's transport. Before a charge reaches PayPal, the
-payment is fed to one principal-wide swarm monitor session. If the aggregate
-crosses the per-payee bound, the wrapper takes the twin's own "refused before any
-charge" path, so the record lands **failed** with the refusing rule named and the
-provider is never called. Because the wrapper keeps the transport contract the
-state machine already expects, it guards the real PayPal transport and the sandbox
-identically, and reconciliation of a payment already in flight is left untouched.
+The roster has 26 roles: the original 18, three historical VAT comparators, two
+additional audit reviewers, and three Eurostat reporters. Rates, financial totals
+and jurisdiction are explicit case facts; absent facts do not become zeroes.
 
-The reaction is a setting, as in swarm-oversight: freeze the whole principal on the
-first breach, or hold only the breaching payment.
+The VAT source is the original 2006 Directive, not a current consolidated national
+tax code. Its standard-rate provision includes an historical validity interval;
+reduced-rate exceptions exist. These agents compare the snapshot and escalate
+below-floor readings rather than certify compliance. Small-undertaking claims
+require human review of national thresholds, headcount and multi-year eligibility.
+The Eurostat reporters provide context, not lending or solvency decisions.
 
-## What it proves
+From `tabletop-twin/backend`, refresh the narrow statistical series and then derive
+priors with their table, jurisdiction, period, dimensions and flags:
 
-One principal, three mandates paying one payee 25,000c each under a 60,000c bound:
+```sh
+python -m twin.audit.harvest --only finance
+python -m twin.audit.calibrate
+```
 
-- **per-mandate only** (the twin as shipped): 75,000c settles — the gap.
-- **with oversight**: 50,000c settles, the third payment failed, no PayPal call.
+The normal full harvest includes these finance slices too. Calibration needs the
+local statutory corpus; after changing that corpus, rebuild its citation index with
+`python -m twin.audit.index build`. A clean checkout can run the integration tests
+from bundled derived priors without fetching or recalibrating anything.
 
-The negative control is the point: removing the oversight layer reproduces the gap
-exactly. The end-to-end tests run the *real* PayPal transport against the twin's
-localhost socket fake and count the orders actually created — two with oversight,
-three without — so the seam is proven on the production code path, not only in a
-stub. The integration also leaves the twin's own safety intact: a payment whose
-reply never arrives still goes to the unknown state and still cannot be retried
-blind, and the rail geography layer still refuses a country PayPal cannot reach.
+## Verification
 
-## Running it
+From `integration`:
 
-From this directory, with no database, no server and no key:
+```sh
+python -m pytest -q
+python -m oversight_twin.demo
+```
 
-    python -m pytest                  # 11 tests: negative controls + PayPal end to end
-    python -m oversight_twin.demo     # the gap, closed, in the twin's settlement path
+Tests cover every roster role through the real PayPal transport against a local
+HTTP fake, human and chain gates, shared-payee limits, repeated calls, missing
+facts, and sandbox-only configuration. With Node and chain dependencies present,
+the suite also runs the local EVM-to-PayPal-to-EVM path using a temporary journal.
 
-Importing the integration package puts both sibling projects on the path, so the
-bridge uses them straight from the checkout — nothing to install, and no change to
-either baseline.
+The aggregate experiment submits three payments of 25,000 minor units to one
+payee against a 60,000 bound. With oversight, 50,000 settles; removing the bound
+lets all 75,000 settle. The demo also adds a legitimate 20,000 payment to a second
+payee: freeze stops it, while hold-only permits it. Negative controls remove human
+clearance, source figures or jurisdiction to show what each check contributes.
+
+The backend's offline evaluation passes 115 checks over 26 scenarios, with all
+18 guard-removal controls detecting their seeded failure and all 34 scored rules
+reached. Contextual size ceilings and the renewable delegation term are not
+counted as enforced thresholds.
+
+## Optional real sandbox smoke
+
+Supply a PayPal **sandbox** app's credentials through the process environment,
+never a tracked file or chat message:
+
+- `PAYPAL_CLIENT_ID`
+- `PAYPAL_SECRET`
+- `PAYPAL_ENVIRONMENT=sandbox`
+- `PAYPAL_SANDBOX_SMOKE=1` (explicit opt-in)
+
+```sh
+python -m oversight_twin.live_smoke
+```
+
+Without keys or opt-in it skips without network access. It refuses live or
+misspelled environments and attempts only USD 1.00 in sandbox funds. Missing
+buyer approval remains pending, not captured; provider refusal is a failing
+payment test, not a passing one. Exit codes: 0 confirmed capture or explicitly
+reported skip; 1 failure; 2 disallowed configuration; 3 unresolved/pending.
+
+## Deliberate limits
+
+This is a single-process prototype, not a production payment or custody service.
+The socket fake models approved funding; real PayPal requires buyer approval.
+Orders collect for the authenticated merchant: a role's `reference_id` is an
+accounting label, **not** a PayPal payout destination. No arbitrary-agent payouts,
+VAT filing, national tax certification or browser checkout is implemented.
+
+The local chain uses deterministic demonstration keys. `HumanGate` is a trusted
+caller's clearance interface, not authentication. The payment journal and order-ID
+mapping are in memory; crash-safe recovery, distributed locking, durable approval
+storage and an atomic transaction across PayPal and the chain are not claimed.
+Never restart or create a new payment to resolve an unknown outcome.

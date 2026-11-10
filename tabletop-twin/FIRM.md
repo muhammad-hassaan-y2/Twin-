@@ -1,23 +1,22 @@
 # The firm beside the table
 
-A second miniature lives on the same service as the cash twin. Eighteen audit roles answer
-questions about European company-audit and financial-statement rules, and the table draws
+A second miniature lives on the same service as the cash twin. Twenty-six audit roles answer
+questions about European company-audit, tax and financial-statement rules, and the table draws
 what they decided. It is not a separate product: it shares the accounts, the world a
 device opens for itself, the ledger, the guardrails and the eval command, and it inherits
 the rule that a number nobody computed may not be spoken.
 
 ## Where its numbers come from
 
-The firm quotes eighteen figures — how long a partner may stay on one engagement, how much
-of a client's fees an audit firm may take before independence is compromised, what a
-related party is, when a group is small enough to be exempt. Seventeen of them were read
-out of a harvest of the law itself: 299 articles across 8 statutes, fetched from open
-EU sources, with a manifest that records what each document was, how big it came back, and
-which article a figure was taken from. That manifest is what makes a derived figure
-different from a remembered one: the harvest can be re-run and the arithmetic repeated, and
-if the two disagree, the figure is wrong in a findable way.
+The firm quotes twenty statutory figures from a historical legal snapshot, including audit
+rotation limits, fee caps, size thresholds and VAT rate provisions. Nineteen were read from
+919 articles across 9 statutes fetched from open EU sources; each derived figure keeps its
+source article and exact quote. The original eight-statute manifest and the additional VAT
+source are separate records, not a claim that the original harvest included the later fetch.
+The harvest can be re-run and the arithmetic repeated. Traceability does not establish that
+an old provision is current law or that a Member State has no applicable derogation.
 
-One of the eighteen is left uncalibrated on purpose. Materiality is normally expressed as a
+One of the twenty is left uncalibrated on purpose. Materiality is normally expressed as a
 percentage of turnover, and nothing in that corpus states the percentage, so the firm
 refuses to quote one it could only have invented. A blank that says "nobody wrote this
 down" is a better answer than a plausible number.
@@ -26,7 +25,7 @@ Every threshold card carries the article it came from and a state — derived, o
 The card is the unit of trust here: a figure with no provenance is not loaded, and a model
 may not move one. That last claim has a guard case, and the case has its negative control.
 
-Not every rule in this harvest is a figure. Four of the eighteen desks answer from a sentence
+Not every rule in this harvest is a figure. Four of the twenty-six desks answer from a sentence
 that states a rule in words and no number at all: how an audit fee may be calculated, when the
 committee's additional report is owed, what the public register has to hold about the firm, and
 which services a firm that assures sustainability reporting may not sell to the same entity. Two
@@ -39,22 +38,40 @@ this firm expects three register particulars because the Directive prints three 
 a programmer wrote three. A provision the corpus stops stating reads as an absence, and the desk
 built on it goes silent instead of remembering the law.
 
+Three of the eight new desks compare declared VAT rates with the original 2006 Directive,
+not current consolidated law. Its standard-rate clause is explicitly dated 2006–2010;
+reduced rates also have derogations. A below-snapshot rate therefore asks for human review,
+not a breach finding, and an above-floor rate is not a compliance certificate. A missing
+rate is distinct from a declared zero. The band desk reads the rate for the declared category.
+
+Two more desks report the renewable delegation term in Article 48a(2) and refer claimed
+small-undertaking status for human review. The latter cannot classify a company from two
+ceiling figures: national choices, headcount, the two-of-three test and financial-year history
+matter. The final three desks report narrow Eurostat inflation, GDP-per-capita and sentiment
+series, retaining dimensions, flags, source and period. Sentiment has no locally invented
+threshold. Missing jurisdiction or evidence produces silence; an available EU fallback is
+labelled as an aggregate rather than presented as a national observation.
+
 ## What a review says
 
-Put an engagement to the firm and each of the eighteen roles answers once. Every answer is a
-verdict, a sentence, and the citation the sentence is standing on. There are four verdicts
-and they are not a sentiment scale: **clear** means the rule was checked and the engagement
-sits inside it, **hold** means the rule binds and something has to happen, **breach** means
-it is already outside the rule, and **silent** means this role has no authority over this
-fact — silence is an answer, not a gap in the run.
+Put an engagement to the firm and each of the twenty-six roles answers once. Every answer is a
+verdict, a sentence, and the citation the sentence is standing on. There are four verdicts:
+**clear** means the desk's check passed or its observation is informational, not a legal
+certification; **hold** asks for an action or human review; **breach** reports a violation of
+the rule being checked; **silent** means the desk lacks authority or evidence for this fact.
 
 A finding *binds* only when it names the role that has to act and the verdict is clear or
-hold. On the first engagement of the review corpus that comes out as fourteen clear, two hold,
-zero breach, two silent, and four findings that bind somebody. Asked over the whole corpus the
-eighteen roles return 252 findings - 163 clear, 45 hold, 14 breach and 30 silent - of which 64
+hold. On the first engagement of the review corpus that comes out as fifteen clear, two hold,
+zero breach, nine silent, and five findings that bind somebody. Asked over the whole corpus the
+twenty-six roles return 364 findings - 177 clear, 45 hold, 14 breach and 128 silent - of which 78
 bind somebody. The corpus is fourteen engagements across seven fictional companies, each one
 placed exactly on, one year past or one cent over a derived boundary, and the numbers above are
-what the machine returned, not what was expected of it.
+what the machine returned, not what was expected of it. The eight desks added since the first
+eighteen account for the wider silent tally: the corpus was written before they existed, so it
+names no jurisdiction, declares no VAT rate and claims no small-undertaking exemption, and a desk
+given none of the facts it asks about stays silent rather than inventing them. The one new desk
+that does bind over this corpus is the delegation desk, which quotes a figure about the firm's own
+regulatory clock and so answers regardless of the client's file.
 
 ## Who decides, and who checks
 
@@ -74,14 +91,14 @@ opinion about language. Seven of them, each one a fact about text:
 - the colleague it asks to act is a role of this firm, and is not itself.
 
 For the quote check to mean anything, the law has to be addressable rather than merely
-stored, so the 299 articles are indexed: each one has an id, can be searched by a question,
-and is kept with the digest of its own text. That is what lets a citation be resolved and a
+stored. The rebuilt corpus index covers all 919 harvested articles, with searchable text
+and a digest for each; adding sources requires rebuilding it. That lets a citation be resolved and a
 quote matched against the bytes instead of against anybody's memory of them. The same reason
 decides what goes into the ask: none of the figures the firm derived from the harvest is in
 it, neither among the facts the model is handed nor anywhere else, because an answer that
 could copy the right number out of its own prompt has been checked by nothing. Each role's
 question is searched on its own words too - putting the client's file into the search was
-tried, and measured over all eighteen desks. Their eighteen questions then answered with only
+tried, and measured over the original eighteen desks. Their eighteen questions then answered with only
 eleven distinct articles between them, and three of those came back for every single one: a
 client's file is written in the same vocabulary as the statute that governs it, so a retriever
 handed the figures stops retrieving and starts matching the words everybody uses.
@@ -114,10 +131,11 @@ panel prints that name rather than a sentence about failure. It means a finding 
 call binding can still be a refusal on the contract, and the two accounts are both true at
 once, so the card shows both.
 
-The second is that an agreement stops short of a signature. The roles can attest to each
-other; they cannot sign on behalf of a human, because there is no human key in this
-deployment. Agreements therefore reach **Attested** and wait, and the count of them waiting
-is shown as a state the table is in rather than a step that failed.
+The second is that an agreement stops at **Attested** until its registered counterparty
+principal countersigns. The local sidecar derives demonstration keys, including principal
+keys; these prove contract mechanics, not production human identity or custody. The PayPal
+hub checks that countersignature and caller clearance before payment, then records chain
+settlement only after confirmed capture. Its tests sign explicitly as a separate step.
 
 ## Agent to agent
 

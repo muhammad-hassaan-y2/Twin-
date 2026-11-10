@@ -17,10 +17,10 @@ This repository holds two projects and the integration that joins them.
   gateway score defences in money, from seeded logs, with confidence intervals and
   negative controls.
 
-- **integration** — the seam between them. swarm-oversight's principal-wide
-  monitor is enforced at tabletop-twin's real settlement boundary, so the twin's
-  PayPal and rail payments gain the cross-mandate aggregate bound that neither
-  project enforces alone. It is additive: both baselines are unchanged.
+- **integration** — a PayPal-centred settlement hub guarded by swarm-oversight.
+  Twenty-six audit, tax and finance roles feed the hub; the chain records their
+  agreements while PayPal handles payments. Human clearance and aggregate limits
+  apply before charging. This branch extends tabletop-twin; swarm-oversight is unchanged.
 
 Each project's own README says what it is and how to run it. Start with
 [tabletop-twin/README.md](tabletop-twin/README.md) and

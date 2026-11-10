@@ -157,24 +157,29 @@ why the money panel can state the twin's week without being asked.
 ## The firm beside the table
 
 The twin answers questions about its own cash. A second miniature on the same service
-answers questions about somebody else's: eighteen audit roles that rule on European
-company-audit and financial-statement rules, and a card on the table that says what they
+answers questions about somebody else's: twenty-six audit, tax and finance roles reviewing
+a historical EU legal snapshot and economic observations, with a card stating what they
 decided. It is the same world, the same accounts, the same ledger and the same rule that a
 figure nobody computed may not be spoken.
 
 Three things keep it honest, and they are the reason it lives here rather than beside it:
 
-- **Its thresholds are read out of the law, not remembered.** Seventeen of the eighteen
-  figures the firm quotes were derived from 299 articles across 8 statutes fetched from
+- **Its thresholds are read out of the law, not remembered.** Nineteen of the twenty
+  figures the firm quotes were derived from 919 articles across 9 statutes fetched from
   open EU sources, each with the article attached. One of them — materiality as a share
   of turnover — is left uncalibrated because no article states it, and a blank that says so
-  is better than a plausible number. Six of the eighteen desks go past the figures this
+  is better than a plausible number. Six of the twenty-six desks go past the figures this
   pass had already derived: four answer from sentences the harvest states in words and no
   number at all — how a fee may be agreed, what the public register has to hold about the
   firm, which services a firm assuring sustainability reporting may not also sell — and two
   do arithmetic on figures the corpus only gave up under a second reading. All six are
   derived the same way, with the sentence kept verbatim and its lettered lists read out of
-  it rather than copied here.
+  it rather than copied here. Eight new desks add historical VAT comparisons, a renewable
+  delegation term, human review of claimed small-company status, and three narrow Eurostat
+  series: inflation, GDP per capita and sentiment. VAT comparisons do not certify current
+  national compliance; the size desk cannot replace national classification. Finance
+  observations carry their table, dimensions, flags and period, label any aggregate fallback,
+  and stay silent when the file names no jurisdiction. Sentiment has no invented threshold.
 - **The agreement is kept somewhere other than in this program's memory.** The roles are
   registered on a Solidity engagement contract on a local EVM sidecar, and the bytecode is
   a second authority that sometimes disagrees: an engagement one basis point past the fee
@@ -182,16 +187,17 @@ Three things keep it honest, and they are the reason it lives here rather than b
   prints the refusal name that came back out of the chain rather than a sentence about
   failure.
 - **A refusal is still evidence.** Agent-to-agent messages go over the same bus, and a
-  refused write is journalled like any other. Agreements stop at *attested* and wait,
-  because nobody in this deployment holds a human key, and the number waiting on a
-  signature is shown as a state the table is in.
+  refused write is journalled like any other. Agreements stop at *attested* until the
+  counterparty principal signs. The local sidecar's deterministic keys demonstrate this
+  mechanism, not production human identity. The integration hub requires that signature
+  before PayPal settlement and only records settlement after confirmed capture.
 
 [`FIRM.md`](FIRM.md) covers the harvest, the verdicts, the contract and what the card is
 allowed to claim. Where the twin only lets a model choose and explain, the firm goes further
 and lets the model decide: given a key, each role's verdict comes from the endpoint, and the
 service files it only after checking it against the text of the law it claims to quote - and
 when the check refuses, the rule answers instead and the card says which of the two spoke.
-With no key, which is how this machine runs, all eighteen answers come from the same rule
+With no key, which is how this machine runs, all twenty-six answers come from the same rule
 planner as the twin, and say so.
 
 ## Accessibility
@@ -220,7 +226,7 @@ The firm beside the table is a second domain, added on purpose: European audit a
 financial-statement rules, put to fourteen fictional engagements, answering only with
 figures the harvest produced. It does not audit the twin's cash and the twin does not speak
 for it; each has its own card. No real firm, real company or real statutory auditor is
-modelled by any of the eighteen roles, and none of this is advice to anybody with a filing
+modelled by any of the twenty-six roles, and none of this is advice to anybody with a filing
 deadline.
 
 ## Running it
@@ -295,9 +301,15 @@ from then on.
 
 ## Verification status
 
-The service is covered by 432 tests that run the forecast, the forks, the policy
+The historical full-service run below predates the twenty-six-role expansion. Current
+integration checks use a local PayPal HTTP fake and a real local EVM; no real PayPal sandbox
+capture or wider-roster UI run is claimed. The full PostgreSQL suite could not be rerun in
+this pass because the local test database did not start; isolated regressions are separate
+from the earlier full-suite evidence.
+
+The earlier service run covered 432 tests for the forecast, the forks, the policy
 engine, the guardrails in front of it, the payment state machine, the settlement catalog,
-the accounts, the world a device opens for itself, the audit trail, the eighteen roles, the
+the accounts, the world a device opens for itself, the audit trail, the then-eighteen roles, the
 law they cite and the checks that decide whether a citation is good enough to file, the
 contract they write to, the real PayPal transport and the Muse route —
 each of the last two against a gateway that answers on a socket, so a refused credential,
@@ -463,7 +475,13 @@ the one that shows the boxes gone, not the one that found them.
 
 The firm's card was driven again in the managed runtime for the eighteen-role roster, and the
 live element text and component values were read out of the running app rather than out of a
-preview. With the service up and no chain anywhere near it, the card read *no contract*, "18
+preview. (The panel evidence in this section is that run's verbatim output, captured before the
+roster grew to twenty-six; the counts it quotes — 18 roles, 17 of 18 figures, 299 articles in 8
+statutes, 252 findings — are the eighteen-desk run's, not the current roster's. [`FIRM.md`](FIRM.md)
+carries the re-measured twenty-six-desk tally: 919 articles in 9 statutes, 19 of 20 figures
+derived, 364 findings over the same fourteen engagements. The card was not re-driven in the
+managed runtime for the wider roster, so nothing here claims it was.) With the service up and no
+chain anywhere near it, the card read *no contract*, "18
 roles named, none hired - no contract was reached", "17 of 18 figures derived out of 299
 articles in 8 statutes - 1 left uncalibrated", and the reason the service gave, naming the
 variable that was not set. A controller was aimed at the card's button and its trigger pressed,
