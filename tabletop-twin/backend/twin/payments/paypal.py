@@ -35,7 +35,7 @@ class TransportTimeout(AmbiguousResult):
 
 
 class ProviderNotFound(MoneyNotMoved):
-    """The provider says it has no record of that attempt — a real answer to a lookup."""
+    """A resource is unavailable; this does not rule out an earlier capture."""
 
 
 def to_amount(amount_cents: int, currency: str = "USD") -> str:
@@ -102,9 +102,11 @@ class PayPalTransport:
         self.config = config
         self._opener = opener
         self._token: tuple[str, float] | None = None
+        self._order_ids: dict[str, str] = {}
 
-    def charge(self, idempotency_key: str, amount_cents: int, recipient: str,
-               currency: str = "USD") -> ProviderResult:
+    def create_order(self, key: str, amount: int, recipient: str,
+                     currency: str = "USD") -> dict:
+        """Return the order and approval links, retaining its ID before capture."""
         order = self._post(
             "/v2/checkout/orders",
             {
@@ -112,43 +114,57 @@ class PayPalTransport:
                 "purchase_units": [
                     {
                         "reference_id": recipient or "tabletop-twin",
-                        "custom_id": idempotency_key,
-                        "amount": {"currency_code": currency, "value": to_amount(amount_cents, currency)},
+                        "custom_id": key,
+                        "amount": {"currency_code": currency, "value": to_amount(amount, currency)},
                     }
                 ],
             },
-            extra_headers={"PayPal-Request-Id": idempotency_key},
+            extra_headers={"PayPal-Request-Id": key},
         )
+        if order.get("id"):
+            self._order_ids[key] = order["id"]
+        return order
+
+    def capture_order(self, order_id: str, key: str) -> ProviderResult:
+        """Capture a known order after the caller has obtained buyer approval."""
+        self._order_ids[key] = order_id
+        captured = self._post(
+            f"/v2/checkout/orders/{order_id}/capture",
+            {},
+            extra_headers={"PayPal-Request-Id": f"{key}:capture"},
+        )
+        return ProviderResult(status=self._map(captured.get("status", "")),
+                              reference=order_id, raw=captured)
+
+    def charge(self, idempotency_key: str, amount_cents: int, recipient: str,
+               currency: str = "USD") -> ProviderResult:
+        order = self.create_order(idempotency_key, amount_cents, recipient, currency)
         order_id = order.get("id")
-        status = self._map(order.get("status", ""))
-        if status == "pending" and order_id:
-            captured = self._post(
-                f"/v2/checkout/orders/{order_id}/capture",
-                {},
-                extra_headers={"PayPal-Request-Id": f"{idempotency_key}:capture"},
-            )
-            status = self._map(captured.get("status", ""))
-            return ProviderResult(status=status, reference=order_id, raw=captured)
-        return ProviderResult(status=status, reference=order_id, raw=order)
+        if str(order.get("status", "")).upper() == "APPROVED" and order_id:
+            return self.capture_order(order_id, idempotency_key)
+        return ProviderResult(status=self._map(order.get("status", "")), reference=order_id, raw=order)
 
     def lookup(self, idempotency_key: str) -> ProviderResult:
-        """Ask what happened to a specific attempt instead of paying again."""
+        """Read a known order; a missing ID or GET 404 cannot exclude prior capture."""
+        order_id = self._order_ids.get(idempotency_key)
+        if not order_id:
+            return ProviderResult(status="unknown", raw={"reason": "no known order ID for this key"})
         try:
-            found = self._post(
-                "/v2/checkout/orders",
-                {"idempotency_id": idempotency_key},
-                extra_headers={"PayPal-Request-Id": f"{idempotency_key}:lookup"},
-            )
+            order = self._get(f"/v2/checkout/orders/{order_id}")
         except ProviderNotFound as exc:
-            return ProviderResult(status="not_found", raw={"reason": str(exc)})
-        orders = found.get("resources") or []
-        if not orders:
-            return ProviderResult(status="not_found", raw=found)
-        order = orders[0]
-        return ProviderResult(status=self._map(order.get("status", "")), reference=order.get("id"), raw=order)
+            return ProviderResult(status="unknown", reference=order_id, raw={"reason": str(exc)})
+        return ProviderResult(status=self._map(order.get("status", "")), reference=order_id, raw=order)
 
     def _map(self, provider_status: str) -> str:
         return _STATUS_MAP.get(str(provider_status).upper(), "unknown")
+
+    def _get(self, path: str) -> dict:
+        request = urllib.request.Request(
+            self.config.base_url + path,
+            method="GET",
+            headers={"Authorization": f"Bearer {self._access_token()}"},
+        )
+        return self._send(request)
 
     def _post(self, path: str, body: dict, extra_headers: dict | None = None) -> dict:
         request = urllib.request.Request(
@@ -197,9 +213,8 @@ class PayPalTransport:
             # A 5xx or a 408 on a request we already sent is not a "no".
             if error.code >= 500 or error.code == 408:
                 raise TransportTimeout(f"HTTP {error.code}") from error
-            # Everything else was refused before the provider did the work, so no
-            # money can be in flight. Say which rule refused it instead of inventing
-            # a status the provider never returned.
+            # This call was refused. A lookup refusal does not establish what
+            # happened on an earlier call; lookup handles a missing order as unknown.
             name = str(detail.get("name") or f"HTTP {error.code}")
             if error.code == 404:
                 raise ProviderNotFound(f"the provider has no such resource ({name})") from error

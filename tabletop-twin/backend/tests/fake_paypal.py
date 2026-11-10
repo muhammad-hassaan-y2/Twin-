@@ -16,9 +16,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class FakePayPal:
-    def __init__(self, client_id: str = "test-client", secret: str = "test-secret") -> None:
+    def __init__(self, client_id: str = "test-client", secret: str = "test-secret",
+                 auto_approve: bool = True) -> None:
         self.client_id = client_id
         self.secret = secret
+        self.auto_approve = auto_approve
         self.orders: dict[str, dict] = {}
         self.by_request_id: dict[str, str] = {}
         self.token_calls = 0
@@ -26,6 +28,7 @@ class FakePayPal:
         self.capture_calls = 0
         self.replays = 0
         self.path_calls: list[str] = []
+        self.request_headers: list[dict] = []
         self.timeout_keys: set[str] = set()  # 500 after the order exists
         self.drop_keys: set[str] = set()  # reply lost in the wire after the order exists
         self.drop_capture_keys: set[str] = set()  # capture happens, the answer never arrives
@@ -61,14 +64,19 @@ class FakePayPal:
     def respond(self, method: str, path: str, headers: dict, body: bytes) -> tuple[int, dict, bool]:
         """Return (status, json_body, drop_the_reply). Keys in headers are lower-cased."""
         self.path_calls.append(f"{method} {path}")
-        if path == "/v1/oauth2/token":
+        self.request_headers.append(headers)
+        if path == "/v1/oauth2/token" and method == "POST":
             return self._token(headers)
         if not self._bearer_ok(headers):
             return 401, {"name": "INVALID_TOKEN", "message": "auth token not recognised"}, False
         if path == "/v2/checkout/orders" and method == "POST":
             return self._orders(headers, body)
-        if path.endswith("/capture") and path.startswith("/v2/checkout/orders/"):
-            return self._capture(headers, path)
+        prefix = "/v2/checkout/orders/"
+        if path.startswith(prefix):
+            if method == "POST" and path.endswith("/capture"):
+                return self._capture(headers, path)
+            if method == "GET" and "/" not in path[len(prefix):]:
+                return self._order(path[len(prefix):])
         return 404, {"name": "RESOURCE_NOT_FOUND"}, False
 
     # ---------------------------------------------------------------- endpoints
@@ -84,13 +92,8 @@ class FakePayPal:
         request_id = headers.get("paypal-request-id", "")
         payload = json.loads(body or b"{}")
 
-        # The reconcile call: same path, but it asks about a past attempt.
-        if "idempotency_id" in payload:
-            key = payload["idempotency_id"]
-            order_id = self.by_request_id.get(key)
-            if order_id is None:
-                return 200, {"resources": []}, False
-            return 200, {"resources": [_public(self.orders[order_id])]}, False
+        if payload.get("intent") != "CAPTURE" or not payload.get("purchase_units"):
+            return 400, {"name": "INVALID_REQUEST"}, False
 
         if request_id in self.by_request_id:
             self.replays += 1
@@ -105,7 +108,8 @@ class FakePayPal:
         self.create_calls += 1
         self._counter += 1
         order_id = f"MOCK{self._counter:06d}"
-        order = {"id": order_id, "status": "CREATED", "custom_id": unit.get("custom_id", ""),
+        order = {"id": order_id, "status": "APPROVED" if self.auto_approve else "CREATED",
+                 "custom_id": unit.get("custom_id", ""),
                  "recipient": recipient, "_cents": cents, "captures": []}
         self.orders[order_id] = order
         self.by_request_id[request_id] = order_id
@@ -116,6 +120,12 @@ class FakePayPal:
             return 500, {"name": "INTERNAL_SERVER_ERROR"}, False
         return 201, _public(order), False
 
+    def _order(self, order_id: str) -> tuple[int, dict, bool]:
+        order = self.orders.get(order_id)
+        if order is None:
+            return 404, {"name": "RESOURCE_NOT_FOUND"}, False
+        return 200, _public(order), False
+
     def _capture(self, headers: dict, path: str) -> tuple[int, dict, bool]:
         order_id = path.split("/")[4]
         order = self.orders.get(order_id)
@@ -124,6 +134,8 @@ class FakePayPal:
         self.capture_calls += 1
         if order["status"] == "COMPLETED":
             return 409, {"name": "ORDER_ALREADY_CAPTURED"}, False
+        if order["status"] != "APPROVED":
+            return 422, {"name": "ORDER_NOT_APPROVED"}, False
         order["status"] = "COMPLETED"
         order["captures"] = [{"id": f"CAP{order_id}", "status": "COMPLETED",
                               "amount": {"currency_code": "USD", "value": f"{order['_cents'] // 100}.{order['_cents'] % 100:02d}"}}]
@@ -143,7 +155,13 @@ def _make_handler(app: FakePayPal):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
+        def do_GET(self):  # noqa: N802 - required by BaseHTTPRequestHandler
+            self._respond()
+
         def do_POST(self):  # noqa: N802 - required by BaseHTTPRequestHandler
+            self._respond()
+
+        def _respond(self):
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b""
             headers = {k.lower(): v for k, v in self.headers.items()}
