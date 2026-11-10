@@ -21,7 +21,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from twin.audit.corpus import CORPUS_DIR, DATA_DIR, corpus_place, measures, sentences
+from twin.audit.corpus import (
+    CORPUS_DIR, DATA_DIR, FINANCE_SLICES, corpus_place, finance_rows, measures, sentences,
+)
 
 UNCALIBRATED = "uncalibrated"
 
@@ -166,6 +168,15 @@ RULES: tuple[Rule, ...] = (
     # law. It is listed so the run proves the absence rather than hiding it.
     Rule("materiality_percent_of_turnover", ("materiality",), "percent",
          note="No EU statute in the corpus states a materiality percentage."),
+    # Original 2006 VAT snapshot, not current national tax compliance.
+    Rule("vat_standard_rate_min_percent", ("standard rate may not be less than",), "percent",
+         pick="min",
+         note="Original 2006 Article 97 snapshot: the quoted period ends on 31 December 2010; "
+              "not current tax compliance or national certification."),
+    Rule("vat_reduced_rate_min_percent", ("reduced rates shall be fixed as a percentage",), "percent",
+         pick="min",
+         note="Original 2006 Article 99 general floor; derogations can allow lower or zero rates. "
+              "Not current tax compliance or national certification."),
 )
 
 # What the firm enforces that has no figure in it. Same corpus, same provenance, one sentence each.
@@ -200,6 +211,58 @@ def load_statutes(corpus: Path | None = None) -> list[dict[str, Any]]:
             out.append(json.loads(path.read_text(encoding="utf-8")))
         except json.JSONDecodeError:
             continue
+    return out
+
+
+# Euro-area aggregates are not interchangeable with the EU aggregate.
+EU_AGGREGATES = ("EU27_2020", "EU28")
+
+
+def load_finance(corpus: Path | None = None) -> dict[str, Any]:
+    """Read only supported slice files, keeping malformed inputs unavailable."""
+    directory = (corpus or CORPUS_DIR) / "finance"
+    out: dict[str, Any] = {}
+    for name, code, query in FINANCE_SLICES:
+        path = directory / f"{name}.json"
+        if not path.exists():
+            continue
+        try:
+            out[name] = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            out[name] = {"name": name, "code": code, "query": query, "rows": [], "error": str(exc)}
+    return out
+
+
+def derive_finance(series: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Keep latest validated cells and provenance; ambiguous slices remain unavailable."""
+    series = series if series is not None else load_finance()
+    out: dict[str, Any] = {}
+    for name, code, query in FINANCE_SLICES:
+        if name not in series:
+            continue
+        doc = series[name]
+        block: dict[str, Any] = {"table": code, "label": "", "query": query,
+                                 "eu": "", "geos": 0, "series": {}}
+        out[name] = block
+        try:
+            rows = finance_rows(name, doc)
+        except ValueError as exc:
+            block["error"] = str(exc)
+            continue
+        block.update(label=doc.get("label", ""), query=doc["query"])
+        for key in ("url", "source_url"):
+            if key in doc:
+                block[key] = doc[key]
+        by_geo = block["series"]
+        for row in rows:
+            geo, period = row["geo"], row["time"]
+            if geo not in by_geo or period > by_geo[geo]["time"]:
+                record = dict(row, query=doc["query"])
+                for key in ("url", "source_url"):
+                    if key in doc:
+                        record.setdefault(key, doc[key])
+                by_geo[geo] = record
+        block.update(eu=next((g for g in EU_AGGREGATES if g in by_geo), ""), geos=len(by_geo))
     return out
 
 
@@ -499,6 +562,7 @@ def derive(statutes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         "provisions": derive_provisions(statutes),
         "size_bands": derive_bands(statutes),
         "non_audit_services": derive_services(statutes),
+        "finance": derive_finance(),
     }
 
 

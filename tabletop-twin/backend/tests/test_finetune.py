@@ -165,13 +165,7 @@ def test_every_case_sits_on_a_boundary_it_was_derived_from():
 def test_the_corpus_covers_every_role_and_every_way_a_question_can_end(doc):
     rows = doc["meta"]["rows"]
     assert len(rows) == len(sweep(Priors.load())) * len(QUESTIONS)
-    assert {row["role"] for row in rows} == {
-        "engagement-partner", "rotation-tracker", "independence-monitor", "non-audit-assessor",
-        "fraud-risk-assessor", "aml-compliance-officer", "evidence-archivist",
-        "group-audit-coordinator", "audit-committee-liaison", "tender-administrator",
-        "materiality-reviewer", "quality-review-partner", "contingent-fee-reviewer",
-        "multi-year-fee-reviewer", "transparency-report-reviewer", "committee-report-reviewer",
-        "register-entry-reviewer", "sustainability-assurance-reviewer"}
+    assert {row["role"] for row in rows} == {role for role, _ in QUESTIONS}
     verdicts = doc["meta"]["verdicts"]
     assert all(count > 0 for count in verdicts.values()), verdicts
     assert all(row["route"] == "rules" for row in rows), "a model wrote none of these sentences"
@@ -243,7 +237,8 @@ def test_the_files_on_disk_are_this_build_and_not_an_edit(box, doc):
     sidecar = json.loads((Path(DATA_DIR) / SIDECAR).read_text(encoding="utf-8"))
     assert sidecar["counts"] == doc["meta"]["counts"]
     assert sidecar["trained_here"] is False
-    assert sidecar["corpus"] == {"articles": 299, "corpus_dir": "backend/.corpus", "statutes": 8}
+    assert sidecar["corpus"] == Priors.load().doc["derived_from"]
+    assert sidecar["corpus"]["corpus_dir"] == "backend/.corpus"
     assert json.dumps(sidecar).count("Hassaan") == 0, "a person's home directory is not provenance"
 
     edited = write(doc, box)

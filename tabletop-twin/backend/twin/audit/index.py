@@ -14,7 +14,7 @@ Three things come out of this file and all three are checkable without a model:
 * **verification** - a quote is real if that exact sequence of words appears in the article it is
   attributed to. Nothing else about the sentence is argued with; the citation either resolves or it
   does not.
-* **a Merkle root over every article** - `law.json` holds the hash of each of the 299 articles and
+* **a Merkle root over every article** - `law.json` holds each article's hash and
   the root they fold into, which is the number a Solidity contract can be given so that *bytecode*
   refuses an article that is not in the law this firm was built on. The root goes on-chain; the
   words stay here, because a chain that stored the Official Journal would be a chain nobody runs.

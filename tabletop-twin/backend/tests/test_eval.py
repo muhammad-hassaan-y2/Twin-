@@ -101,6 +101,12 @@ def test_coverage_is_measured_from_the_engine_not_from_a_list_kept_beside_it():
     seen = harness.report()["metrics"]
     assert set(seen["rules_reachable"]) == set(rules) | set(harness.guardrail_rules()) | set(thresholds)
     assert seen["rules_missed"] == [], "every rule this code can answer with is reached by a scenario"
+    assert set(seen["rules_reached"]) <= set(seen["rules_reachable"])
+    assert seen["rule_coverage_pct"] == 100
+    assert "public_register_particulars" in thresholds
+    assert "vat_standard_rate_min_percent" in thresholds
+    assert "size_balance_sheet_ceiling_eur" not in thresholds
+    assert "delegation_period_years" not in thresholds
 
 
 def test_the_command_exits_clean_on_the_shipped_corpus():

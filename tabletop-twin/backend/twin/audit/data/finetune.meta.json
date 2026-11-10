@@ -1,15 +1,15 @@
 {
  "corpus": {
-  "articles": 299,
+  "articles": 919,
   "corpus_dir": "backend/.corpus",
-  "statutes": 8
+  "statutes": 9
  },
  "counts": {
   "cases": 14,
   "preference": 110,
-  "roles": 18,
-  "skipped": 38,
-  "supervised": 252
+  "roles": 26,
+  "skipped": 52,
+  "supervised": 364
  },
  "format": {
   "preference": "prompt/chosen/rejected per line, method type dpo",
@@ -416,6 +416,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "and in point (b) of paragraph 2 may be extended to the maximum duration of: (a) 20 years, where a public tendering process for the statutory audit is conducted in accordance with paragraphs 2 to 5 of Article 16 and takes effect upon the expiry of the maximum durations referred to in the second subpa",
@@ -805,6 +989,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": " the second subparagraph of paragraph 1 and in point (b) of paragraph 2; or (b) twenty four years, where, after the expiry of the maximum durations referred to in the second subparagraph of paragraph 1 and in point (b) of paragraph 2, more than one statutory auditor or audit firm is simultaneously e",
@@ -1195,6 +1563,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Nordwind Textil AG",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -1570,6 +2122,190 @@
     "32022"
    ],
    "role": "sustainability-assurance-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Halbe Druckerei GmbH",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
    "route": "rules",
    "verdict": "silent"
   },
@@ -1958,6 +2694,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Vantage Logistics NV",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -2338,6 +3258,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -2713,6 +3817,190 @@
     "32022"
    ],
    "role": "sustainability-assurance-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
    "route": "rules",
    "verdict": "silent"
   },
@@ -3098,6 +4386,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Sable Health Holdings SA",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -3473,6 +4945,190 @@
     "32022"
    ],
    "role": "sustainability-assurance-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "000",
+    "0034",
+    "12",
+    "12000000",
+    "12000000.0",
+    "3",
+    "32013",
+    "40000000",
+    "40000000.0",
+    "500",
+    "500.0",
+    "6",
+    "6000000",
+    "6000000.0",
+    "80000000",
+    "80000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
    "route": "rules",
    "verdict": "silent"
   },
@@ -3857,6 +5513,190 @@
     "32022"
    ],
    "role": "sustainability-assurance-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Meridian Utilities PLC",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
    "route": "rules",
    "verdict": "silent"
   },
@@ -4244,6 +6084,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -4626,6 +6650,190 @@
    "role": "sustainability-assurance-reviewer",
    "route": "rules",
    "verdict": "hold"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Kestrel Foods BV",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
   },
   {
    "cite": {
@@ -5011,6 +7219,190 @@
   },
   {
    "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
     "article": "17",
     "celex": "32014R0537",
     "quote": "Neither the initial engagement of a particular statutory auditor or audit firm, nor this in combination with any renewed engagements therewith shall exceed a maximum duration of 10 years.",
@@ -5390,6 +7782,190 @@
    "role": "sustainability-assurance-reviewer",
    "route": "rules",
    "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "97"
+   ],
+   "role": "vat-standard-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "99",
+    "celex": "32006L0112",
+    "quote": "The reduced rates shall be fixed as a percentage of the taxable amount, which may not be less than 5 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "5.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "2006",
+    "32006",
+    "5",
+    "5.0",
+    "99"
+   ],
+   "role": "vat-reduced-rate-officer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "97",
+    "celex": "32006L0112",
+    "quote": "From 1 January 2006 until 31 December 2010, the standard rate may not be less than 15 %.",
+    "scope": "not current tax compliance",
+    "snapshot": "original 2006",
+    "state": "calibrated",
+    "value": "15.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0112",
+    "1",
+    "15",
+    "15.0",
+    "2006",
+    "2010",
+    "31",
+    "32006",
+    "5",
+    "5.0",
+    "97"
+   ],
+   "role": "vat-rate-band-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "article": "39",
+    "celex": "32014L0056",
+    "quote": "The power to adopt delegated acts referred to in Articles 26(3), 45(6), 46(2) and 47(3) shall be conferred on the Commission for a period of five years from 16 June 2014.",
+    "state": "calibrated",
+    "target_article": "48a(2)",
+    "target_celex": "32006L0043",
+    "value": "5.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "0043",
+    "0056",
+    "16",
+    "2",
+    "2014",
+    "26",
+    "3",
+    "32006",
+    "32014",
+    "39",
+    "45",
+    "46",
+    "47",
+    "48",
+    "5",
+    "5.0",
+    "6"
+   ],
+   "role": "delegation-standards-reviewer",
+   "route": "rules",
+   "verdict": "clear"
+  },
+  {
+   "cite": {
+    "article": "3",
+    "celex": "32013L0034",
+    "quote": "However, the thresholds shall not exceed EUR 6 000 000 for the balance sheet total and EUR 12 000 000 for the net turnover.",
+    "state": "calibrated",
+    "value": "6000000.0"
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [
+    "000",
+    "0034",
+    "10000000",
+    "10000000.0",
+    "12",
+    "12000000",
+    "12000000.0",
+    "125",
+    "125.0",
+    "20000000",
+    "20000000.0",
+    "3",
+    "32013",
+    "6",
+    "6000000",
+    "6000000.0"
+   ],
+   "role": "size-ceiling-reviewer",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "macro-inflation-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "gdp-per-capita-reporter",
+   "route": "rules",
+   "verdict": "silent"
+  },
+  {
+   "cite": {
+    "geo": "",
+    "state": "not_in_corpus",
+    "table": "",
+    "time": "",
+    "value": ""
+   },
+   "client": "Aldermen Property Trust",
+   "facts": [],
+   "role": "economic-sentiment-monitor",
+   "route": "rules",
+   "verdict": "silent"
   }
  ],
  "skipped": [
@@ -5418,9 +7994,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Nordwind Textil AG",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5448,9 +8036,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Nordwind Textil AG",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5475,9 +8075,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Nordwind Textil AG",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5492,6 +8104,17 @@
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
+   "client": "Halbe Druckerei GmbH",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
    "client": "Vantage Logistics NV",
    "priors": [
     "transparency_report_deadline_months"
@@ -5516,9 +8139,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Vantage Logistics NV",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5546,9 +8181,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Sable Health Holdings SA",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5576,9 +8223,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Sable Health Holdings SA",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5606,9 +8265,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Sable Health Holdings SA",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5625,9 +8296,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Meridian Utilities PLC",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5654,9 +8337,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Meridian Utilities PLC",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5684,9 +8379,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Kestrel Foods BV",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5706,9 +8413,21 @@
     "aml_record_retention_years",
     "delegation_period_years",
     "transparency_report_available_years",
-    "transparency_report_deadline_months"
+    "transparency_report_deadline_months",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "transparency-report-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Kestrel Foods BV",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
   },
   {
@@ -5717,7 +8436,8 @@
     "aml_record_retention_years",
     "auditor_return_cooldown_years",
     "delegation_period_years",
-    "transparency_report_available_years"
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
    ],
    "role": "aml-compliance-officer",
    "why": "moving any of them leaves a sentence the case grounds"
@@ -5752,6 +8472,17 @@
   {
    "client": "Aldermen Property Trust",
    "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Aldermen Property Trust",
+   "priors": [
     "transparency_report_deadline_months"
    ],
    "role": "contingent-fee-reviewer",
@@ -5767,13 +8498,24 @@
    ],
    "role": "multi-year-fee-reviewer",
    "why": "moving any of them leaves a sentence the case grounds"
+  },
+  {
+   "client": "Aldermen Property Trust",
+   "priors": [
+    "aml_record_retention_years",
+    "delegation_period_years",
+    "transparency_report_available_years",
+    "vat_reduced_rate_min_percent"
+   ],
+   "role": "delegation-standards-reviewer",
+   "why": "moving any of them leaves a sentence the case grounds"
   }
  ],
  "trained_here": false,
  "verdicts": {
   "breach": 14,
-  "clear": 163,
+  "clear": 177,
   "hold": 45,
-  "silent": 30
+  "silent": 128
  }
 }

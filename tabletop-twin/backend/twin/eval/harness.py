@@ -21,8 +21,9 @@ import re
 import sys
 from typing import Callable
 
+from twin.audit.agents import Priors
 from twin.eval.cases import CASES, Case, Check, Run
-from twin.eval.firm import FIRM_CASES, enforced_thresholds
+from twin.eval.firm import FIRM_CASES, enforced_provisions, enforced_thresholds
 from twin.policy import engine as policy_engine
 from twin.safety import guardrails
 
@@ -38,14 +39,8 @@ def guardrail_rules() -> list[str]:
 
 
 def threshold_rules() -> list[str]:
-    """Every statutory number the audit firm looks up, read out of the code that looks it up.
-
-    These sit in the same list as the engine's rule names because they are the same kind of
-    claim: a decision the code is able to make, which a scenario therefore has to make at least
-    once. The corpus derives more figures than this - the Commission's delegation period is not a
-    rule a signing partner applies - and the ones nobody enforces are not scored as gaps.
-    """
-    return sorted(enforced_thresholds())
+    """Use the same numerical and worded rule vocabulary for coverage's numerator and denominator."""
+    return sorted(enforced_thresholds() | enforced_provisions(Priors.load()))
 
 
 def run_case(case: Case, *, control: bool = False) -> dict:

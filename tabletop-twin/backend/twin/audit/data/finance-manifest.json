@@ -1,0 +1,70 @@
+{
+ "counts": {
+  "rows": 580,
+  "slices_fetched": 3,
+  "slices_refused": 0
+ },
+ "harvested_at": "2026-11-10T19:12:42+0500",
+ "licence": "Eurostat data are released under the CC BY 4.0 licence (https://ec.europa.eu/info/legal-notice_en).",
+ "sources": [
+  {
+   "bytes": 8114,
+   "code": "prc_hicp_aind",
+   "error": "",
+   "geos": 43,
+   "name": "hicp_inflation_percent",
+   "query": "coicop=CP00&unit=RCH_A_AVG",
+   "rows": 214,
+   "status": 200,
+   "times": [
+    "2021",
+    "2022",
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "title": "HICP - annual data (average index and rate of change) (1996-2025)",
+   "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_aind?format=JSON&lang=EN&coicop=CP00&unit=RCH_A_AVG&lastTimePeriod=5"
+  },
+  {
+   "bytes": 8621,
+   "code": "tec00001",
+   "error": "",
+   "geos": 42,
+   "name": "gdp_per_capita_eur",
+   "query": "unit=CP_EUR_HAB",
+   "rows": 206,
+   "status": 200,
+   "times": [
+    "2021",
+    "2022",
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "title": "Gross domestic product at market prices",
+   "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/tec00001?format=JSON&lang=EN&unit=CP_EUR_HAB&lastTimePeriod=5"
+  },
+  {
+   "bytes": 6273,
+   "code": "ei_bssi_m_r2",
+   "error": "",
+   "geos": 32,
+   "name": "economic_sentiment_index",
+   "query": "indic=BS-ESI-I",
+   "rows": 160,
+   "status": 200,
+   "times": [
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10"
+   ],
+   "title": "Economic sentiment and confidence indicators by sector - monthly data",
+   "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/ei_bssi_m_r2?format=JSON&lang=EN&indic=BS-ESI-I&lastTimePeriod=5"
+  }
+ ],
+ "unavailable": [],
+ "user_agent": "tabletop-twin/0.1 (audit corpus harvester)"
+}

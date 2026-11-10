@@ -1,4 +1,4 @@
-"""The eighteen agents, and the line each of them is not allowed to cross.
+"""The twenty-six agents, and the line each of them is not allowed to cross.
 
 Every question the firm asks of a case has one answer from one place: the sentence in the
 harvested EU text that states the rule. Where the corpus states a number, the agent quotes it
@@ -10,7 +10,7 @@ can tell the difference between a clean engagement and an empty one.
 
 A model decides nothing here, and that is the point of this file: every verdict below is arithmetic
 on a figure the corpus was calibrated against, or a reading of a sentence the corpus states in
-words, so the eighteen answers stand with no endpoint, no key and no network. `ModelWords` is the
+words, so the twenty-six answers stand with no endpoint, no key and no network. `ModelWords` is the
 only place Muse reaches in, and it reaches in at the wording - handed the figures a finding was
 computed from and asked for one sentence about them, with every number in the reply checked against
 that list and an invented one dropped for the rule's own words.
@@ -91,6 +91,13 @@ class Case:
     register_status: str = ""
     register_particulars: tuple[str, ...] = ()
     sustainability_assurance: bool = False
+    # None is missing; zero is a reported rate.
+    standard_vat_rate_percent: float | None = None
+    reduced_vat_rate_percent: float | None = None
+    supply_in_reduced_category: bool = False
+    # An empty jurisdiction supplies no location for a finance observation.
+    client_geo: str = ""
+    claims_small_undertaking: bool = False
 
     def dependence_percent(self) -> float:
         """What share of the firm's fees this one client is."""
@@ -202,6 +209,39 @@ class Priors:
     def band(self, name: str) -> dict[str, Any]:
         return ((self.doc.get("size_bands") or {}).get("bands") or {}).get(name) or {}
 
+    def finance(self, name: str, geo: str = "") -> dict[str, Any]:
+        """Latest cell, with an explicit aggregate fallback or no observation."""
+        block = (self.doc.get("finance") or {}).get(name) or {}
+        series = block.get("series") or {}
+        if not geo or not series or block.get("error"):
+            return {}
+        key = geo if geo in series else (block.get("eu") or "")
+        if key not in series:
+            return {}
+        record = dict(series[key])
+        record.update({"name": name, "table": block.get("table", ""), "label": block.get("label", ""),
+                       "query": block.get("query", ""), "geo": key, "fallback": key != geo})
+        if "url" in block:
+            record.setdefault("url", block["url"])
+        return record
+
+    def finance_cite(self, name: str, geo: str = "") -> dict[str, str]:
+        record = self.finance(name, geo)
+        if not record:
+            return {"state": "not_in_corpus", "table": "", "geo": "", "time": "", "value": ""}
+        return {
+            "table": str(record.get("table", "")), "geo": str(record.get("geo", "")),
+            "geo_label": str(record.get("geo_label", "")), "time": str(record.get("time", "")),
+            "value": str(record.get("value")), "state": "harvested",
+            "query": str(record.get("query", "")), "flags": str(record.get("flags", "")),
+            "url": str(record.get("url", record.get("source_url", ""))),
+            "fallback": "eu_aggregate" if record.get("fallback") else "requested",
+        }
+
+    def finance_where(self, name: str, geo: str = "") -> str:
+        record = self.finance(name, geo)
+        return (f" (Eurostat {record['table']}, {record['geo']} {record['time']})" if record else "")
+
     def uncalibrated(self) -> list[str]:
         return list(self.doc.get("uncalibrated") or [])
 
@@ -235,7 +275,7 @@ def _derogation(priors: Priors, letter: str) -> list[str]:
     return ((priors.services.get("derogation") or {}).get("points") or {}).get(letter, [])
 
 
-# ------------------------------------------------------------------ the eighteen questions
+# ------------------------------------------------------------- the twenty-six questions
 
 def engagement_partner(case: Case, p: Priors) -> Finding:
     """May this firm still be the auditor? Tenure is a ceiling in the Regulation, not a habit.
@@ -871,6 +911,161 @@ def sustainability_assurance_reviewer(case: Case, p: Priors) -> Finding:
                    "audit-committee-liaison")
 
 
+def _vat_snapshot(role: str, kind: str, rate: float | None, p: Priors,
+                  numbers: dict[str, Any]) -> Finding:
+    """Compare only with the original 2006 snapshot, never certify national tax compliance."""
+    asks = f"how the reported {kind} VAT rate compares with the original 2006 snapshot"
+    name = f"vat_{kind}_rate_min_percent"
+    floor = p.value(name)
+    cite = dict(p.cite(name), snapshot="original 2006", scope="not current tax compliance")
+    numbers = dict(numbers, floor_percent=floor, snapshot="original 2006")
+    if rate is None or floor is None:
+        return Finding(role, asks, SILENT,
+                       "A reported rate or calibrated floor is missing for the original 2006 snapshot; "
+                       "no current tax compliance assessment is made.", numbers, cite)
+    under = rate < floor
+    historical = ("Article 97's quoted period ends on 31 December 2010. " if kind == "standard"
+                  else "Article 99's general floor does not resolve derogations, including lawful zero rates. ")
+    action = ("Below the snapshot floor: a human must review applicable national law and derogations. "
+              if under else "At or above the snapshot floor: informational only. ")
+    return Finding(role, asks, HOLD if under else CLEAR,
+                   f"The reported {kind} VAT rate is {rate:g}% against the original 2006 snapshot "
+                   f"floor of {floor:g}%{p.where(name)}. {historical}{action}"
+                   "This is not current tax compliance or national certification.",
+                   numbers, cite, "engagement-partner")
+
+
+def vat_standard_rate_officer(case: Case, p: Priors) -> Finding:
+    """Report a standard-rate comparison with the original 2006 snapshot."""
+    return _vat_snapshot("vat-standard-rate-officer", "standard", case.standard_vat_rate_percent, p,
+                         {"standard_vat_rate_percent": case.standard_vat_rate_percent})
+
+
+def vat_reduced_rate_officer(case: Case, p: Priors) -> Finding:
+    """Report a reduced-rate comparison without ruling out lawful derogations."""
+    numbers = {"reduced_vat_rate_percent": case.reduced_vat_rate_percent,
+               "supply_in_reduced_category": case.supply_in_reduced_category}
+    if not case.supply_in_reduced_category:
+        return Finding("vat-reduced-rate-officer", "compare with the original 2006 reduced VAT floor",
+                       SILENT, "No supply is reported in a reduced-rate category for this original 2006 "
+                       "snapshot comparison; no current tax compliance assessment is made.",
+                       numbers, dict(p.cite("vat_reduced_rate_min_percent"), snapshot="original 2006",
+                                     scope="not current tax compliance"))
+    return _vat_snapshot("vat-reduced-rate-officer", "reduced", case.reduced_vat_rate_percent, p, numbers)
+
+
+def vat_rate_band_reviewer(case: Case, p: Priors) -> Finding:
+    """Use the reported rate for the supply's declared category."""
+    kind = "reduced" if case.supply_in_reduced_category else "standard"
+    rate = case.reduced_vat_rate_percent if case.supply_in_reduced_category else case.standard_vat_rate_percent
+    numbers = {"standard_vat_rate_percent": case.standard_vat_rate_percent,
+               "reduced_vat_rate_percent": case.reduced_vat_rate_percent,
+               "standard_floor_percent": p.value("vat_standard_rate_min_percent"),
+               "reduced_floor_percent": p.value("vat_reduced_rate_min_percent"),
+               "supply_in_reduced_category": case.supply_in_reduced_category, "rate_kind": kind}
+    return _vat_snapshot("vat-rate-band-reviewer", kind, rate, p, numbers)
+
+
+def delegation_standards_reviewer(case: Case, p: Priors) -> Finding:
+    """Annotate the amendment's target and renewable term without altering its prior."""
+    asks = "what renewable term the original amendment gives the delegation"
+    years = p.value("delegation_period_years")
+    cite = dict(p.cite("delegation_period_years"), target_celex="32006L0043", target_article="48a(2)")
+    numbers = {"delegation_period_years": years, "renewable": True}
+    if years is None:
+        return Finding("delegation-standards-reviewer", asks, SILENT,
+                       "The corpus states no period for the delegation of standard-making power.",
+                       numbers, cite)
+    return Finding("delegation-standards-reviewer", asks, CLEAR,
+                   f"The original amendment inserts Article 48a(2) into the audit Directive: "
+                   f"a renewable {years:g}-year delegation term, not a lifetime limit. The term is "
+                   "extended for equal periods unless the European Parliament or Council opposes; "
+                   "this snapshot does not establish the delegation's current status.",
+                   numbers, cite, "engagement-partner")
+
+
+def size_ceiling_reviewer(case: Case, p: Priors) -> Finding:
+    """Small-status claims require national classification, not a two-balance verdict."""
+    asks = "does the claimed small-undertaking status need national classification review"
+    balance = p.value("size_balance_sheet_ceiling_eur")
+    turnover = p.value("size_net_turnover_ceiling_eur")
+    cite = p.cite("size_balance_sheet_ceiling_eur")
+    numbers = {"balance_sheet_eur": case.balance_sheet_eur, "net_turnover_eur": case.turnover_eur,
+               "balance_sheet_ceiling_eur": balance, "net_turnover_ceiling_eur": turnover,
+               "employees": case.employees, "claims_small_undertaking": case.claims_small_undertaking,
+               "threshold_scope": "snapshot national-threshold maxima",
+               "classification_modeled": False}
+    if not case.claims_small_undertaking:
+        return Finding("size-ceiling-reviewer", asks, SILENT,
+                       f"{case.client}'s file claims no small-undertaking status.", numbers, cite)
+    balance_text = f"EUR {balance:,.0f}" if balance is not None else "unavailable"
+    turnover_text = f"EUR {turnover:,.0f}" if turnover is not None else "unavailable"
+    return Finding("size-ceiling-reviewer", asks, HOLD,
+                   f"Reported balance sheet EUR {case.balance_sheet_eur:,.0f}, turnover "
+                   f"EUR {case.turnover_eur:,.0f}, and headcount {case.employees:g}; snapshot maxima "
+                   f"for national balance-sheet and turnover thresholds are {balance_text} and "
+                   f"{turnover_text}{p.where('size_balance_sheet_ceiling_eur')}. These are context, "
+                   "not a classification: a human must check national thresholds, the two-of-three "
+                   "criteria including headcount, and the two-consecutive-year classification rule, "
+                   "which are not modeled here.", numbers, cite, "engagement-partner")
+
+
+def macro_inflation_reporter(case: Case, p: Priors) -> Finding:
+    """Quote harvested inflation as context, not a compliance threshold."""
+    asks = "what the harvested inflation rate for the client's jurisdiction is"
+    record = p.finance("hicp_inflation_percent", case.client_geo)
+    cite = p.finance_cite("hicp_inflation_percent", case.client_geo)
+    numbers = {"client_geo": case.client_geo or None, "reference_geo": record.get("geo"),
+               "hicp_inflation_percent": record.get("value"), "reference_year": record.get("time")}
+    if not record:
+        return Finding("macro-inflation-reporter", asks, SILENT,
+                       f"The harvested finance slice carries no all-items inflation rate for "
+                       f"{case.client_geo or 'the jurisdiction this file names'}, so this desk has no "
+                       "measured figure to report.", numbers, cite)
+    place = "the EU aggregate" if record.get("fallback") else record.get("geo_label") or record["geo"]
+    return Finding("macro-inflation-reporter", asks, CLEAR,
+                   f"All-items HICP inflation for {place} was {record['value']:g}% in {record['time']}"
+                   f"{p.finance_where('hicp_inflation_percent', case.client_geo)}.",
+                   numbers, cite, "engagement-partner")
+
+
+def gdp_per_capita_reporter(case: Case, p: Priors) -> Finding:
+    """Quote harvested GDP per capita as economic context."""
+    asks = "what the harvested GDP per capita for the client's jurisdiction is"
+    record = p.finance("gdp_per_capita_eur", case.client_geo)
+    cite = p.finance_cite("gdp_per_capita_eur", case.client_geo)
+    numbers = {"client_geo": case.client_geo or None, "reference_geo": record.get("geo"),
+               "gdp_per_capita_eur": record.get("value"), "reference_year": record.get("time")}
+    if not record:
+        return Finding("gdp-per-capita-reporter", asks, SILENT,
+                       f"The harvested finance slice carries no GDP per capita for "
+                       f"{case.client_geo or 'the jurisdiction this file names'}.", numbers, cite)
+    place = "the EU aggregate" if record.get("fallback") else record.get("geo_label") or record["geo"]
+    return Finding("gdp-per-capita-reporter", asks, CLEAR,
+                   f"GDP per capita for {place} was EUR {record['value']:,.0f} in {record['time']}"
+                   f"{p.finance_where('gdp_per_capita_eur', case.client_geo)}.",
+                   numbers, cite, "engagement-partner")
+
+
+def economic_sentiment_monitor(case: Case, p: Priors) -> Finding:
+    """Report the latest harvested sentiment value without a threshold verdict."""
+    asks = "what the latest harvested economic sentiment value is"
+    record = p.finance("economic_sentiment_index", case.client_geo)
+    cite = p.finance_cite("economic_sentiment_index", case.client_geo)
+    numbers = {"client_geo": case.client_geo or None, "reference_geo": record.get("geo"),
+               "economic_sentiment_index": record.get("value"), "reference_period": record.get("time")}
+    if not record:
+        return Finding("economic-sentiment-monitor", asks, SILENT,
+                       f"The harvested finance slice carries no economic sentiment indicator for "
+                       f"{case.client_geo or 'the jurisdiction this file names'}.", numbers, cite)
+    place = "the EU aggregate" if record.get("fallback") else record.get("geo_label") or record["geo"]
+    return Finding("economic-sentiment-monitor", asks, CLEAR,
+                   f"The latest harvested economic sentiment for {place} was {record['value']:g} "
+                   f"in {record['time']}{p.finance_where('economic_sentiment_index', case.client_geo)}; "
+                   "informational only, with no threshold or trend inferred.",
+                   numbers, cite, "engagement-partner")
+
+
 def _letters(letters: list[str]) -> str:
     return ", ".join(f"({letter})" for letter in letters) or "none"
 
@@ -894,6 +1089,14 @@ QUESTIONS: tuple[tuple[str, Callable[[Case, Priors], Finding]], ...] = (
     ("committee-report-reviewer", committee_report_reviewer),
     ("register-entry-reviewer", register_entry_reviewer),
     ("sustainability-assurance-reviewer", sustainability_assurance_reviewer),
+    ("vat-standard-rate-officer", vat_standard_rate_officer),
+    ("vat-reduced-rate-officer", vat_reduced_rate_officer),
+    ("vat-rate-band-reviewer", vat_rate_band_reviewer),
+    ("delegation-standards-reviewer", delegation_standards_reviewer),
+    ("size-ceiling-reviewer", size_ceiling_reviewer),
+    ("macro-inflation-reporter", macro_inflation_reporter),
+    ("gdp-per-capita-reporter", gdp_per_capita_reporter),
+    ("economic-sentiment-monitor", economic_sentiment_monitor),
 )
 
 ROLES = tuple(role for role, _ in QUESTIONS)
@@ -950,7 +1153,7 @@ class ModelWords:
 
 
 class Firm:
-    """Asks the eighteen questions of a case, then turns the answers into traffic on the chain."""
+    """Asks the twenty-six questions of a case, then turns the answers into traffic on the chain."""
 
     def __init__(self, priors: Priors | None = None, words: Any = None, judge: Any = None) -> None:
         self.priors = priors or Priors.load()

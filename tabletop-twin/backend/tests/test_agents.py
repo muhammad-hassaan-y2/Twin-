@@ -1,4 +1,4 @@
-"""Eighteen roles, one question each, and no figure the harvested text did not state.
+"""Twenty-six roles, one question each, and no figure the harvested text did not state.
 
 These tests read like the firm does: a verdict is only worth anything next to the run that
 avoids it. Every threshold here is taken from `priors.json` and a case is built one year or one
@@ -458,13 +458,13 @@ def test_the_assurance_desk_carries_only_the_points_the_text_carries(p):
                non_audit_services=()).verdict == CLEAR
 
 
-# -------------------------------------------------------------------- the eighteen desks
+# ------------------------------------------------------------------ the twenty-six desks
 
 def test_the_roles_are_the_agents_the_chain_will_answer(p):
     roster = json.loads((Path(__file__).resolve().parents[2] / "chain" / "roster.json")
                         .read_text(encoding="utf-8"))
     assert set(ROLES) == {agent["role"] for agent in roster["agents"]}
-    assert len(ROLES) == len(QUESTIONS) == len(roster["agents"]) == 18
+    assert len(ROLES) == len(QUESTIONS) == len(roster["agents"]) == 26
     assert [role for role, _ in agents.QUESTIONS] == list(ROLES)
 
     firm = Firm(p)
@@ -625,3 +625,194 @@ def test_a_breaching_fee_freezes_every_agreement_that_carries_it(p, chain, store
     cleared = Firm(p).transact(clean(p, non_audit_fee_cents=allowed), again)
     assert [row["state"] for row in cleared["agreements"]] and all(
         row["state"] == "Attested" for row in cleared["agreements"])
+
+
+# ---------------------------------------------------- snapshot comparisons and finance context
+
+VAT_DESKS = (
+    ("vat-standard-rate-officer", "standard", False),
+    ("vat-reduced-rate-officer", "reduced", True),
+    ("vat-rate-band-reviewer", "standard", False),
+    ("vat-rate-band-reviewer", "reduced", True),
+)
+FINANCE_DESKS = (
+    ("macro-inflation-reporter", "hicp_inflation_percent"),
+    ("gdp-per-capita-reporter", "gdp_per_capita_eur"),
+    ("economic-sentiment-monitor", "economic_sentiment_index"),
+)
+
+
+@pytest.mark.parametrize("role,kind,reduced", VAT_DESKS)
+@pytest.mark.parametrize("reported,verdict", [
+    ("missing", SILENT), ("zero", HOLD), ("below", HOLD), ("at", CLEAR), ("above", CLEAR),
+])
+def test_vat_rates_compare_only_with_the_original_snapshot(p, role, kind, reduced, reported, verdict):
+    name = f"vat_{kind}_rate_min_percent"
+    floor = p.value(name)
+    assert floor is not None and floor > 0
+    rate = {"missing": None, "zero": 0.0, "below": floor / 2,
+            "at": floor, "above": floor + 1}[reported]
+    finding = one(p, role, supply_in_reduced_category=reduced,
+                  **{f"{kind}_vat_rate_percent": rate})
+
+    assert finding.verdict == verdict
+    assert finding.numbers[f"{kind}_vat_rate_percent"] == rate
+    assert finding.numbers["floor_percent"] == floor
+    assert finding.cite == dict(p.cite(name), snapshot="original 2006",
+                                scope="not current tax compliance")
+    assert "original 2006" in finding.sentence
+    assert "not current tax compliance" in finding.sentence or "no current tax compliance" in finding.sentence
+    if verdict == SILENT:
+        assert not finding.binding
+    else:
+        assert finding.binding and finding.to_role == "engagement-partner"
+        assert ("informational only" if verdict == CLEAR else "human must review") in finding.sentence
+        assert ("31 December 2010" if kind == "standard" else "derogations") in finding.sentence
+
+
+@pytest.mark.parametrize("reduced", [False, True])
+@pytest.mark.parametrize("selected", ["missing", "below", "above"])
+def test_vat_band_uses_the_declared_category_not_the_other_reported_rate(p, reduced, selected):
+    kind, other = ("reduced", "standard") if reduced else ("standard", "reduced")
+    floor, other_floor = p.value(f"vat_{kind}_rate_min_percent"), p.value(f"vat_{other}_rate_min_percent")
+    assert floor is not None and other_floor is not None
+    rate = {"missing": None, "below": floor / 2, "above": floor + 1}[selected]
+    other_rate = other_floor / 2 if selected == "above" else other_floor + 1
+    finding = one(p, "vat-rate-band-reviewer", supply_in_reduced_category=reduced,
+                  **{f"{kind}_vat_rate_percent": rate, f"{other}_vat_rate_percent": other_rate})
+    assert finding.verdict == {"missing": SILENT, "below": HOLD, "above": CLEAR}[selected]
+    assert finding.numbers["rate_kind"] == kind
+    assert finding.numbers["floor_percent"] == floor
+    assert finding.cite["value"] == str(floor)
+
+    # Even a missing *other* floor must not prevent the declared category being compared.
+    doc = json.loads(json.dumps(p.doc))
+    del doc["priors"][f"vat_{other}_rate_min_percent"]
+    assert one(Priors(doc), "vat-rate-band-reviewer", supply_in_reduced_category=reduced,
+               **{f"{kind}_vat_rate_percent": rate}).verdict == finding.verdict
+
+
+@pytest.mark.parametrize("role,kind,reduced", VAT_DESKS)
+def test_removing_the_selected_vat_prior_mutes_its_comparison(p, role, kind, reduced):
+    name = f"vat_{kind}_rate_min_percent"
+    floor = p.value(name)
+    assert floor is not None
+    facts = {"supply_in_reduced_category": reduced, f"{kind}_vat_rate_percent": floor + 1}
+    assert one(p, role, **facts).verdict == CLEAR
+    doc = json.loads(json.dumps(p.doc))
+    del doc["priors"][name]
+    finding = one(Priors(doc), role, **facts)
+    assert finding.verdict == SILENT and not finding.binding
+    assert finding.numbers["floor_percent"] is None
+
+
+def test_reduced_vat_desk_needs_a_reduced_category_even_when_a_rate_is_reported(p):
+    floor = p.value("vat_reduced_rate_min_percent")
+    assert floor is not None
+    for rate in (0.0, floor + 1):
+        finding = one(p, "vat-reduced-rate-officer", reduced_vat_rate_percent=rate,
+                      supply_in_reduced_category=False)
+        assert finding.verdict == SILENT and not finding.binding
+        assert finding.cite == dict(p.cite("vat_reduced_rate_min_percent"), snapshot="original 2006",
+                                    scope="not current tax compliance")
+        assert not number_tokens(finding.sentence) - figures(finding)
+
+
+@pytest.mark.parametrize("claimed", [False, True])
+@pytest.mark.parametrize("balance_side,turnover_side", [(-1, -1), (-1, 1), (1, -1), (1, 1)])
+def test_small_status_is_never_classified_from_national_threshold_maxima(p, claimed, balance_side,
+                                                                      turnover_side):
+    balance = p.value("size_balance_sheet_ceiling_eur")
+    turnover = p.value("size_net_turnover_ceiling_eur")
+    assert balance is not None and turnover is not None
+    finding = one(p, "size-ceiling-reviewer", claims_small_undertaking=claimed,
+                  balance_sheet_eur=balance + balance_side, turnover_eur=turnover + turnover_side)
+    assert finding.verdict == (HOLD if claimed else SILENT)
+    assert finding.numbers["classification_modeled"] is False
+    assert finding.numbers["balance_sheet_ceiling_eur"] == balance
+    assert finding.numbers["net_turnover_ceiling_eur"] == turnover
+    assert finding.binding == claimed
+    if claimed:
+        assert finding.to_role == "engagement-partner"
+        assert "national thresholds" in finding.sentence
+        assert "headcount" in finding.sentence and "two-consecutive-year" in finding.sentence
+
+
+def test_small_status_claim_still_needs_review_when_the_maxima_are_unavailable(p):
+    doc = json.loads(json.dumps(p.doc))
+    for name in ("size_balance_sheet_ceiling_eur", "size_net_turnover_ceiling_eur"):
+        del doc["priors"][name]
+    finding = one(Priors(doc), "size-ceiling-reviewer", claims_small_undertaking=True)
+    assert finding.verdict == HOLD and finding.binding
+    assert finding.numbers["classification_modeled"] is False
+
+
+def test_delegation_cites_the_inserted_article_and_a_renewable_not_lifetime_term(p):
+    name = "delegation_period_years"
+    years = p.value(name)
+    assert years is not None
+    doc = json.loads(json.dumps(p.doc))
+    doc["priors"][name]["value"] = years + 2
+    for source in (p, Priors(doc)):
+        finding = one(source, "delegation-standards-reviewer")
+        assert finding.verdict == CLEAR
+        assert finding.numbers == {"delegation_period_years": source.value(name), "renewable": True}
+        assert finding.cite == dict(source.cite(name), target_celex="32006L0043", target_article="48a(2)")
+        assert "renewable" in finding.sentence and "not a lifetime limit" in finding.sentence
+        assert "current status" in finding.sentence
+    del doc["priors"][name]
+    assert one(Priors(doc), "delegation-standards-reviewer").verdict == SILENT
+
+
+@pytest.fixture(scope="module")
+def finance_geo(p):
+    available = [set(p.doc["finance"][name]["series"]) for _, name in FINANCE_DESKS]
+    common = set.intersection(*available)
+    assert common, "the finance desks need a common harvested jurisdiction for the controls"
+    return sorted(common)[0]
+
+
+@pytest.mark.parametrize("role,name", FINANCE_DESKS)
+def test_finance_desks_are_silent_without_a_geo_or_source(p, finance_geo, role, name):
+    reported = one(p, role, client_geo=finance_geo)
+    assert reported.verdict == CLEAR
+    assert reported.numbers[name] == p.finance(name, finance_geo)["value"]
+    assert reported.cite == p.finance_cite(name, finance_geo)
+    missing_geo = one(p, role, client_geo="")
+    assert missing_geo.verdict == SILENT and not missing_geo.binding
+
+    doc = json.loads(json.dumps(p.doc))
+    del doc["finance"]
+    missing_source = one(Priors(doc), role, client_geo=finance_geo)
+    assert missing_source.verdict == SILENT and not missing_source.binding
+    assert missing_source.numbers[name] is None
+    assert missing_source.cite["state"] == "not_in_corpus"
+
+
+@pytest.mark.parametrize("muted_role,removed", FINANCE_DESKS)
+def test_removing_one_finance_source_mutes_only_its_own_desk(p, finance_geo, muted_role, removed):
+    doc = json.loads(json.dumps(p.doc))
+    del doc["finance"][removed]
+    changed = Priors(doc)
+    for role, name in FINANCE_DESKS:
+        finding = one(changed, role, client_geo=finance_geo)
+        if role == muted_role:
+            assert finding.verdict == SILENT and finding.numbers[name] is None
+            assert not finding.binding
+        else:
+            assert finding == one(p, role, client_geo=finance_geo)
+            assert finding.verdict == CLEAR
+
+
+@pytest.mark.parametrize("value", [99.0, 101.0], ids=["below-100", "above-100"])
+def test_economic_sentiment_is_informational_on_both_sides_of_100(p, finance_geo, value):
+    doc = json.loads(json.dumps(p.doc))
+    name = "economic_sentiment_index"
+    doc["finance"][name]["series"][finance_geo]["value"] = value
+    source = Priors(doc)
+    finding = one(source, "economic-sentiment-monitor", client_geo=finance_geo)
+    assert finding.verdict == CLEAR
+    assert finding.numbers[name] == value and finding.cite == source.finance_cite(name, finance_geo)
+    assert "informational only" in finding.sentence and "no threshold or trend inferred" in finding.sentence
+    assert set(finding.numbers) == {"client_geo", "reference_geo", name, "reference_period"}
+    assert "centre" not in finding.sentence.lower() and "center" not in finding.sentence.lower()

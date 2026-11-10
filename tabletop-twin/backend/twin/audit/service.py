@@ -1,10 +1,10 @@
 """The one place the HTTP edge decides whether a chain is answering.
 
 The firm itself needs nothing from outside: `agents.Firm.review` reads the derived thresholds and
-answers eighteen questions, and it does that with no key, no node process and no database. What it
+answers twenty-six questions, and it does that with no key, no node process and no database. What it
 cannot do alone is turn an answer into an agreement somebody is bound by, and that is the only
 reason this module exists. It holds one connection and one decision — is there a contract, and are
-the eighteen roles on it — and remembers the answer, because a request that re-asked would either
+the twenty-six roles on it — and remembers the answer, because a request that re-asked would either
 hang a panel behind a dead sidecar or burn gas re-registering a role the registry already knows.
 
 With no chain the review still runs and still says what it thinks; `agreements` comes back empty
@@ -160,7 +160,7 @@ class FirmService:
         return Bus(chain, store=store, user_id=user_id, day=day)
 
     def review(self, case: Case, store: Any, user_id: str, day: int) -> dict[str, Any]:
-        """Eighteen answers, and the agreements they are entitled to open."""
+        """Twenty-six answers, and the agreements they are entitled to open."""
         firm = Firm.from_env()
         bus = self.bus(store, user_id, day)
         if bus is None:

@@ -16,12 +16,15 @@ sentence it came from.
 
 from __future__ import annotations
 
+import argparse
 import json
+import math
 import os
 import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -45,6 +48,7 @@ STATUTES: tuple[tuple[str, str], ...] = (
     ("32014L0095", "Directive 2014/95/EU on non-financial reporting (NFRD)"),
     ("32018L0843", "Directive (EU) 2018/843 on combating money laundering (AML)"),
     ("32019R0888", "Regulation (EU) 2019/2088 on sustainability-related disclosures (SFDR)"),
+    ("32006L0112", "Directive 2006/112/EC on the common system of value added tax (VAT)"),
 )
 
 # Probed, not assumed. Only the ones that answer carry rows into the corpus.
@@ -60,6 +64,13 @@ TABLES: tuple[tuple[str, str], ...] = (
     ("sbs_oc_rec_r2", "Structural business statistics by NACE Rev. 2"),
     ("sbs_fr_a2r", "Business demography by size class and activity"),
     ("sbr_nbr_a", "Number of enterprises by activity"),
+)
+
+# Named, unstrided slices kept separately from the broad corpus.
+FINANCE_SLICES: tuple[tuple[str, str, str], ...] = (
+    ("hicp_inflation_percent", "prc_hicp_aind", "coicop=CP00&unit=RCH_A_AVG"),
+    ("gdp_per_capita_eur", "tec00001", "unit=CP_EUR_HAB"),
+    ("economic_sentiment_index", "ei_bssi_m_r2", "indic=BS-ESI-I"),
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -382,6 +393,108 @@ def harvest(*, quiet: bool = False, only: str = "") -> dict[str, Any]:
     return manifest
 
 
+def finance_rows(name: str, doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validate a supported slice; reject ambiguous cells rather than choosing by order."""
+    spec = next((s for s in FINANCE_SLICES if s[0] == name), None)
+    if spec is None or not isinstance(doc, dict):
+        raise ValueError("unsupported finance slice")
+    _, code, query = spec
+    if doc.get("name", name) != name or doc.get("code") != code or doc.get("error"):
+        raise ValueError(str(doc.get("error") or "finance slice identity mismatch"))
+    actual = doc.get("query")
+    if not isinstance(actual, str):
+        raise ValueError("missing finance query")
+    expected = urllib.parse.parse_qsl(query, strict_parsing=True)
+    if sorted(urllib.parse.parse_qsl(actual, keep_blank_values=True, strict_parsing=True)) != sorted(expected):
+        raise ValueError("unexpected finance dimension filters")
+    rows = doc.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("empty or malformed finance rows")
+    cells: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("malformed finance row")
+        geo, period, value = row.get("geo"), row.get("time"), row.get("value")
+        if not isinstance(geo, str) or not geo.strip() or not isinstance(period, str) or not period.strip():
+            raise ValueError("missing finance geography or period")
+        if type(value) not in (int, float) or (isinstance(value, float) and not math.isfinite(value)):
+            raise ValueError("finance value must be numeric and finite")
+        if row.get("dataset", code) != code or any(row.get(key) != val for key, val in expected):
+            raise ValueError("finance row does not match requested dimensions")
+        key = (geo, period)
+        if key in cells and cells[key] != row:
+            raise ValueError(f"conflicting finance cells for {geo}/{period}")
+        cells[key] = row
+    return [dict(cells[key]) for key in sorted(cells)]
+
+
+def harvest_finance(*, quiet: bool = False) -> dict[str, Any]:
+    """Save full finance slices and a separate manifest; failures replace stale rows."""
+    finance_dir = CORPUS_DIR / "finance"
+    finance_dir.mkdir(parents=True, exist_ok=True)
+    sources: list[dict[str, Any]] = []
+    for name, code, query in FINANCE_SLICES:
+        url = EUROSTAT_URL.format(code=code) + f"?format=JSON&lang=EN&{query}&lastTimePeriod=5"
+        got = fetch(url, "application/json", lang="")
+        error = got.error or (f"HTTP {got.status}" if got.status != 200 else "")
+        doc: dict[str, Any] = {"name": name, "code": code, "query": query, "url": url,
+                               "label": "", "rows": [], "error": error}
+        if not error:
+            try:
+                payload = json.loads(got.body)
+                if not isinstance(payload, dict):
+                    raise ValueError("expected a JSON-stat object")
+                names, sizes = payload.get("id"), payload.get("size")
+                if (not isinstance(names, list) or not names or len(set(names)) != len(names)
+                        or not isinstance(sizes, list) or len(names) != len(sizes)
+                        or any(type(size) is not int or size <= 0 for size in sizes)
+                        or not isinstance(payload.get("label", ""), str)):
+                    raise ValueError("invalid JSON-stat dimensions or label")
+                for dim, size in zip(names, sizes):
+                    index = payload["dimension"][dim]["category"]["index"]
+                    if (any(type(i) is not int for i in index.values())
+                            or sorted(index.values()) != list(range(size))):
+                        raise ValueError("invalid JSON-stat dimension index")
+                if any(not re.fullmatch(r"0|[1-9]\d*", key) or int(key) >= math.prod(sizes)
+                       for key in payload.get("value", {})):
+                    raise ValueError("invalid JSON-stat cell offset")
+                rows = flatten_table(code, payload)
+                if any(not r.get(dim) for r in rows for dim in names):
+                    raise ValueError("unresolved JSON-stat dimension")
+                doc["rows"] = finance_rows(name, dict(doc, rows=rows))
+                doc["label"] = payload.get("label", "")
+                json.dumps(doc, allow_nan=False)
+            except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
+                doc.update(rows=[], label="", error=f"invalid finance response: {exc}")
+        (finance_dir / f"{name}.json").write_text(
+            json.dumps(doc, indent=1, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8")
+        row = {"name": name, "code": code, "query": query, "url": url,
+               "status": got.status, "bytes": got.bytes, "error": doc["error"],
+               "title": doc["label"], "rows": len(doc["rows"]),
+               "geos": len({r["geo"] for r in doc["rows"]}),
+               "times": sorted({r["time"] for r in doc["rows"]})}
+        sources.append(row)
+        if not quiet:
+            print(f"finance {name:26s} {got.status} {row['rows']} rows  {row['error']}")
+    manifest = {
+        "harvested_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "licence": "Eurostat data are released under the CC BY 4.0 licence "
+                   "(https://ec.europa.eu/info/legal-notice_en).",
+        "user_agent": USER_AGENT,
+        "sources": sources,
+        "counts": {"slices_fetched": sum(not s["error"] for s in sources),
+                   "slices_refused": sum(bool(s["error"]) for s in sources),
+                   "rows": sum(s["rows"] for s in sources)},
+        "unavailable": [{"name": s["name"], "code": s["code"], "status": s["status"], "reason": s["error"]}
+                        for s in sources if s["error"] or s["status"] != 200],
+    }
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / "finance-manifest.json").write_text(
+        json.dumps(manifest, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
+
+
 def _counts(sources: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "statutes_fetched": sum(1 for s in sources if s["kind"] == "statute" and s["status"] == 200),
@@ -448,14 +561,16 @@ def flatten_table(code: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def main(argv: list[str]) -> int:
-    as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
-    only = next((a.split("=", 1)[1] for a in argv if a.startswith("--only=")), "")
-    argv = [a for a in argv if not a.startswith("--only=")]
-    if argv and argv[0] in {"-h", "--help"}:
-        print("usage: python -m twin.audit.harvest [--json] [--only=statutes|tables]\n"
-              "  fetches the EU audit corpus into backend/.corpus and writes the manifest")
-        return 0
+    parser = argparse.ArgumentParser(prog="python -m twin.audit.harvest")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--only", choices=("statutes", "tables", "finance"), default="")
+    args = parser.parse_args(argv)
+    as_json, only = args.json, args.only
+    if only == "finance":
+        finance = harvest_finance(quiet=as_json)
+        print(json.dumps(finance, indent=1, ensure_ascii=False) if as_json else
+              f"manifest -> {DATA_DIR / 'finance-manifest.json'}")
+        return 0 if finance["sources"] and not finance["unavailable"] else 1
     manifest = harvest(quiet=as_json, only=only)
     if only:
         # A narrowed run keeps the other half of the record it already had, so the tracked
@@ -474,10 +589,16 @@ def main(argv: list[str]) -> int:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     (DATA_DIR / "manifest.json").write_text(
         json.dumps(manifest, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"counts": manifest["counts"], "unavailable": manifest["unavailable"]},
-                     indent=1, ensure_ascii=False) if as_json else
-          f"manifest -> {DATA_DIR / 'manifest.json'}")
-    return 0 if manifest["counts"]["statutes_fetched"] else 1
+    summary = {"counts": manifest["counts"], "unavailable": manifest["unavailable"]}
+    finance = harvest_finance(quiet=as_json) if not only else None
+    if finance is not None:
+        summary["finance"] = {"counts": finance["counts"], "unavailable": finance["unavailable"]}
+    print(json.dumps(summary, indent=1, ensure_ascii=False) if as_json else
+          f"manifest -> {DATA_DIR / 'manifest.json'}"
+          + (f"; finance -> {DATA_DIR / 'finance-manifest.json'}" if finance is not None else ""))
+    ok = manifest["counts"]["statutes_fetched"] and (
+        finance is None or (finance["sources"] and not finance["unavailable"]))
+    return 0 if ok else 1
 
 
 def _read_manifest() -> dict[str, Any]:

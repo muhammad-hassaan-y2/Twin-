@@ -1,4 +1,4 @@
-"""The audit subsystem: a statutory-audit firm of eighteen agents, calibrated on harvested
+"""The audit subsystem: a statutory-audit firm of twenty-six agents, calibrated on harvested
 EU law and statistics, whose agreements between agents are settled on a real contract.
 
 `corpus` fetches, `priors` derives the numbers and the worded provisions, `agents` runs the firm,

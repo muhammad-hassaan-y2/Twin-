@@ -21,6 +21,7 @@ import inspect
 import io
 import json
 import re
+from dataclasses import replace
 from typing import Any
 
 from twin.audit import agents
@@ -76,10 +77,16 @@ class Ledger:
 
 
 def review(priors: Priors | None = None) -> tuple[Priors, Firm, list[tuple[Case, list[Finding]]]]:
-    """Every swept case, every role, once. The one thing all these scenarios share."""
+    """Exercise the legacy sweep and explicit tax, size and finance facts."""
     p = priors or Priors.load()
     firm = Firm(p)
-    return p, firm, [(case, firm.review(case)) for case in sweep(p)]
+    cases = list(sweep(p))
+    for delta in (-1, 1):
+        cases.append(replace(
+            cases[0], client_geo="DE", claims_small_undertaking=True, supply_in_reduced_category=True,
+            standard_vat_rate_percent=p.value("vat_standard_rate_min_percent") + delta,
+            reduced_vat_rate_percent=p.value("vat_reduced_rate_min_percent") + delta))
+    return p, firm, [(case, firm.review(case)) for case in cases]
 
 
 class Answer(io.BytesIO):
@@ -373,16 +380,12 @@ def every_figure_in_a_finding_traces_to_a_fact(run: Run) -> list[Check]:
 
 
 def enforced_thresholds() -> set[str]:
-    """Which numbers the firm actually reads, taken from the code that reads them.
-
-    The corpus derives more figures than an agent enforces - the Commission's delegation period
-    is not a rule a signing partner applies - so coverage is asked of the ones the source looks
-    up, not of everything the harvest happened to contain. The leading dot keeps a sentence
-    lookup (`provision_cite("...")`) out of a number list it is not in.
-    """
+    """Read threshold names from code, excluding absent materiality and contextual figures."""
     source = inspect.getsource(agents)
     read = set(re.findall(r'\.(?:value|cite|prior)\("([a-z_]+)"\)', source))
-    return {name for name in read if name != "materiality_percent_of_turnover"}
+    context_only = {"materiality_percent_of_turnover", "delegation_period_years",
+                    "size_balance_sheet_ceiling_eur", "size_net_turnover_ceiling_eur"}
+    return read - context_only
 
 
 def enforced_provisions(p: Priors) -> set[str]:

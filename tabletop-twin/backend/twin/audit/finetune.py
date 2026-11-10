@@ -6,7 +6,7 @@ purpose - `TWIN_FINE_TUNE_BASE`, `TWIN_FINE_TUNE_KEY`, `TWIN_FINE_TUNE_MODEL` - 
 with `--yes`. This repository has never completed a training run, and the sidecar says so in
 `trained_here` rather than letting a reader infer it from the files' existence.
 
-What the corpus teaches is deliberately narrow. The eighteen agents already decide from derived
+What the corpus teaches is deliberately narrow. The twenty-six agents already decide from derived
 citations, and the only thing a model is asked for in `agents.py` is one sentence of prose about
 figures it was handed. So every row is exactly that call: the case's figures, the verdict the
 rules reached, and the article the verdict came from on one side; the firm's own sentence on the
