@@ -8,6 +8,7 @@ WORKDIR /workspace
 FROM backend-base AS backend-deps
 COPY tabletop-twin/backend/pyproject.toml tabletop-twin/backend/
 COPY tabletop-twin/backend/twin tabletop-twin/backend/twin
+COPY tabletop-twin/chain/roster.json /workspace/tabletop-twin/chain/roster.json
 RUN uv pip install --system --no-cache -e "./tabletop-twin/backend[dev]"
 WORKDIR /workspace/tabletop-twin/backend
 
@@ -19,6 +20,13 @@ FROM web-base AS web-deps
 COPY tabletop-twin/web/package.json tabletop-twin/web/package-lock.json ./
 RUN ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci
 COPY tabletop-twin/web ./
+
+FROM node:22-bookworm-slim AS chain-deps
+WORKDIR /workspace/tabletop-twin/chain
+COPY tabletop-twin/chain/package.json tabletop-twin/chain/package-lock.json ./
+RUN npm ci
+COPY tabletop-twin/chain ./
+COPY tabletop-twin/backend/twin/audit/data/priors.json /workspace/tabletop-twin/backend/twin/audit/data/priors.json
 
 FROM python:3.12-slim AS integration
 

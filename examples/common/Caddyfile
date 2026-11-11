@@ -21,7 +21,9 @@ localhost, web.local {
 
 	# The client calls /api/...; FastAPI serves /v1/...
 	handle_path /api/* {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			flush_interval -1
+		}
 	}
 
 	handle {

@@ -21,3 +21,9 @@ docker_build(
     '.',
     target='integration',
 )
+
+docker_build(
+    'twin-chain',
+    '.',
+    target='chain-deps',
+)

@@ -14,3 +14,7 @@ services:
     build:
       context: .
       target: integration
+  chain:
+    build:
+      context: .
+      target: chain-deps

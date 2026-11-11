@@ -35,10 +35,10 @@ Tiltfile
 .dockerignore
 
 # Not part of the integration image (Dockerfile, target integration)
-tabletop-twin/chain
 swarm-oversight/data
 swarm-oversight/results
 swarm-oversight/report.pdf
 swarm-oversight/tests
 **/*.journal.jsonl
 **/artifacts
+!tabletop-twin/chain/artifacts

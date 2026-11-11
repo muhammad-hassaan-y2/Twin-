@@ -30,6 +30,21 @@ services:
       backend:
         condition: service_started
 
+  chain:
+    image: twin-chain
+    command: node serve.mjs
+    network_mode: "service:backend"
+    environment:
+      TWIN_CHAIN_JOURNAL: /data/journal.jsonl
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - chaindata:/data
+    depends_on:
+      backend:
+        condition: service_started
+
   integration:
     image: twin-integration
     ports:
@@ -58,3 +73,4 @@ services:
 
 volumes:
   pgdata:
+  chaindata:
