@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabletop-twin"
+version = "0.1.0"
+description = "A miniature cash-flow world you manipulate with your hands."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.130",
+  "uvicorn>=0.30",
+  "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+# The worlds live in PostgreSQL, so a test run needs a server. conftest starts one from
+# the packaged binaries when TWIN_DB_URL is unset, which is what this extra is for.
+dev = ["pytest>=8", "postgresql-binaries>=18"]
+
+[tool.setuptools.packages.find]
+include = ["twin*"]
+
+[tool.setuptools.package-data]
+"twin.data" = ["*.json"]
+"twin.persona" = ["*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

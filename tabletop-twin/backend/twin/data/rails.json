@@ -1,0 +1,118 @@
+{
+  "compiled_on": "2026-10-30",
+  "note": "Coverage and fees are the twin's arithmetic inputs, not quotes. They were compiled from published sources on the date above and drift with sanctions, data-localisation rules and rate cards. Re-check against each provider's own pages before acting on a refusal or a cost.",
+  "sources": [
+    "https://www.paypal.com/us/webapps/mpp/country-worldwide",
+    "https://www.paypal.com/us/business/paypal-business-fees",
+    "https://www.paypal.com/us/brc/article/what-is-a-cross-border-fee",
+    "https://www.cs-cart.com/blog/paypal-countries-availability/"
+  ],
+  "minor_units_note": "Every amount in this application is integer minor units of one currency, so 'cents' means 1/100 for USD, 1/1 for JPY and 1/1000 for BHD. See minor_units.",
+  "minor_units": {
+    "USD": 2, "EUR": 2, "GBP": 2, "AUD": 2, "CAD": 2, "CHF": 2, "CNY": 2, "HKD": 2,
+    "NZD": 2, "SEK": 2, "DKK": 2, "NOK": 2, "PLN": 2, "CZK": 2, "HUF": 2, "ILS": 2,
+    "MXN": 2, "MYR": 2, "PHP": 2, "SGD": 2, "THB": 2, "TRY": 2, "TWD": 2, "BRL": 2,
+    "RUB": 2, "INR": 2, "PKR": 2, "BDT": 2, "NGN": 2, "ZAR": 2, "KES": 2, "EGP": 2,
+    "JPY": 0, "KRW": 0, "VND": 0, "CLP": 0,
+    "BHD": 3, "KWD": 3, "OMR": 3, "TND": 3, "JOD": 3, "IQD": 3, "LYD": 3
+  },
+  "exponent_overrides": {
+    "note": "Providers occasionally deviate from ISO 4217 for a currency in a specific API. Left empty rather than guessed. If a live provider rejects an amount for one currency, put its code and exponent here instead of changing the arithmetic.",
+    "values": {}
+  },
+  "rails": [
+    {
+      "name": "paypal",
+      "label": "PayPal Checkout",
+      "transport": "paypal",
+      "live": true,
+      "fee_bps": 349,
+      "fixed_cents": 49,
+      "cross_border_bps": 150,
+      "fx_spread_bps": 350,
+      "dispute_fee_cents": 1500,
+      "chargeback_fee_cents": 2000,
+      "settlement_note": "A hold, reserve or limitation can outlast 180 days under PayPal's User Agreement, so money that arrives is not necessarily money that is available.",
+      "currencies": ["USD", "EUR", "GBP", "AUD", "CAD", "CHF", "CNY", "HKD", "NZD", "SEK", "DKK", "NOK", "PLN", "CZK", "HUF", "ILS", "MXN", "MYR", "PHP", "SGD", "THB", "TRY", "TWD", "BRL", "RUB"],
+      "coverage": {
+        "unavailable": {
+          "AF": "no PayPal service",
+          "BY": "no PayPal service",
+          "CU": "no PayPal service",
+          "IR": "no PayPal service",
+          "IQ": "no PayPal service",
+          "KP": "no PayPal service",
+          "LR": "no PayPal service",
+          "LY": "no PayPal service",
+          "MM": "no PayPal service",
+          "PK": "no PayPal service",
+          "RU": "service suspended since 2022",
+          "SD": "no PayPal service",
+          "SY": "no PayPal service",
+          "TR": "consumer service stopped in 2016 over local data-server requirements",
+          "VE": "no PayPal service",
+          "ZW": "no PayPal service"
+        },
+        "cannot_receive": {
+          "AM": "sending only; a recipient account cannot hold or withdraw",
+          "GE": "sending only; a recipient account cannot hold or withdraw"
+        },
+        "no_local_withdrawal": {
+          "KZ": "sending works, no local bank withdrawal",
+          "OM": "no local bank withdrawal",
+          "QA": "sending only, no Qatari bank withdrawal",
+          "VN": "no local bank withdrawal"
+        },
+        "no_domestic": {
+          "IN": "international receipts only; no domestic transfers"
+        },
+        "limited": {
+          "DO": "limits on international transfers",
+          "TW": "business tools restricted"
+        }
+      }
+    },
+    {
+      "name": "local_transfer",
+      "label": "Local bank transfer",
+      "transport": "sandbox",
+      "live": false,
+      "fee_bps": 0,
+      "fixed_cents": 0,
+      "cross_border_bps": 0,
+      "fx_spread_bps": 0,
+      "settlement_note": "Domestic rails usually clear in days, not seconds, and a transfer can be recalled by its sender. Verify the business effect before calling it settled.",
+      "currencies": ["INR", "PKR", "NGN", "ZAR", "KES", "EGP", "BDT", "BRL", "MXN", "IDR", "VND", "PHP", "THB"],
+      "coverage": {
+        "note": "No verified country map. This stands in for whichever domestic rail the deployment actually wires — UPI, SEPA, PIX, NIP, IBFT and so on — and refuses nothing until its adapter declares its own coverage.",
+        "unavailable": {},
+        "cannot_receive": {},
+        "no_local_withdrawal": {},
+        "no_domestic": {},
+        "limited": {}
+      }
+    },
+    {
+      "name": "card_gateway",
+      "label": "Card gateway",
+      "transport": "sandbox",
+      "live": false,
+      "fee_bps": 290,
+      "fixed_cents": 30,
+      "cross_border_bps": 150,
+      "fx_spread_bps": 0,
+      "dispute_fee_cents": 0,
+      "chargeback_fee_cents": 1500,
+      "settlement_note": "Scheme fees vary by card class and country. The rates here are an editable estimate, not a contract.",
+      "currencies": ["USD", "EUR", "GBP", "AUD", "CAD", "INR", "BRL", "ZAR", "SGD", "HKD", "JPY", "MXN"],
+      "coverage": {
+        "note": "No verified country map. A deployment supplying a real gateway adapter should declare the countries it clears into.",
+        "unavailable": {},
+        "cannot_receive": {},
+        "no_local_withdrawal": {},
+        "no_domestic": {},
+        "limited": {}
+      }
+    }
+  ]
+}

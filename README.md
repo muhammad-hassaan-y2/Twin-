@@ -1,19 +1,18 @@
-# PayPal AI Hackathon — Oversight Twin
+# Twin: Tabletop Twin, Swarm Oversight & PayPal Settlement Hub
 
-**Project combining modular systems:**
-1. **`tabletop-twin`**: PayPal Orders v2 execution engine with an explicit
-   idempotency-keyed payment state machine (PENDING -> COMPLETED / FAILED / UNKNOWN).
-2. **`swarm-oversight`**: Multi-agent AI safety monitor that intercepts spend
-   requests across autonomous agents to prevent threshold-evasion attacks
-   (split payments, multi-hop relays, payee alias spoofing).
-3. **`integration`**: Enterprise settlement pipeline, CRM reconciliation, PostgreSQL durable ledger, and Gemini tool calling.
+This repository holds two core projects, the enterprise integration that joins them, and the **PayPal AI Hackathon Oversight Twin** production service.
 
-The **`oversight_twin`** wrapper places the multi-agent guard inline in the
-PayPal execution pipeline before `charge()` hits the PayPal Sandbox API.
+- **`swarm-oversight`**: The Apart Swarm Alignment sprint entry (Track 4, multi-agent oversight and control). It measures the aggregate gap in agent payment protocols (such as Google's AP2): a per-mandate spending cap does not bind the principal across separately issued mandates. A swarm-level monitor and a gateway score defences in money, from seeded logs, with confidence intervals and negative controls.
+- **`tabletop-twin`**: A miniature of one person's next ninety days of cash, standing on their real table, that they can push around with their hands in XR. A Python service owns the ledger, the forecast, the spending policy, a payment state machine and a real PayPal settlement transport; an Immersive Web SDK client owns the table, the gestures and the captions.
+- **`integration`**: The joined enterprise system: a PayPal-centred settlement hub and a client billing desk guarded by swarm-oversight. Twenty-six audit, tax and finance roles review an engagement; binding findings become payment instructions; a named person clears them; the principal-wide monitor holds the aggregate bound; the merchant book bills the client through PayPal and captures once.
+- **`app/` (PayPal AI Hackathon Oversight Twin)**: FastAPI REST gateway placing the multi-agent guard inline in the PayPal execution pipeline before `charge()` hits the PayPal Sandbox API.
 
 ---
 
-## Architecture Diagram
+## PayPal AI Hackathon — Oversight Twin API
+
+The **`oversight_twin`** wrapper places the multi-agent guard inline in the
+PayPal execution pipeline before `charge()` hits the PayPal Sandbox API.
 
 ```mermaid
 graph TD
@@ -32,18 +31,14 @@ graph TD
     B -->|JSON metrics| G
 ```
 
----
-
-## Endpoints
+### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/agents/charge` | Run the oversight guard; if clean, create a PayPal order. Returns `200 COMPLETED`, `402 FAILED`, or `500 UNKNOWN`. |
 | `GET` | `/api/v1/swarm/metrics` | Return aggregate swarm metrics: total spend, active mandates, caught attack attempts. |
 
----
-
-## Endpoint: POST /api/v1/agents/charge
+### Endpoint: POST /api/v1/agents/charge
 
 **Request body:**
 
@@ -87,11 +82,7 @@ graph TD
 }
 ```
 
----
-
-## Endpoint: GET /api/v1/swarm/metrics
-
-**Response:**
+### Swarm Metrics: GET /api/v1/swarm/metrics
 
 ```json
 {
@@ -107,30 +98,38 @@ graph TD
 
 ---
 
-## Installation & Running
-
-### 1. Project Structure
+## Project Structure
 
 ```
 Twin/
-├─ app/
-│  ├─ main.py          # FastAPI endpoints
-│  ├─ oversight_twin.py # Guard + Session + MoneyNotMoved
-│  ├─ paypal_client.py # PayPal Orders v2 client
-│  └─ model.py         # Shared dataclasses
-├─ integration/        # Enterprise CRM, settlement & PostgreSQL ledger
-├─ swarm-oversight/    # Multi-agent AI safety monitor & research harness
-├─ tabletop-twin/      # Immersive XR client & backend forecasting twin
-├─ specs/              # System specifications
-├─ tests/              # Test suites
-├─ Dockerfile
-├─ docker-compose.yml
-└─ Tiltfile
+├─ app/                  # FastAPI REST gateway with Oversight Twin guard
+│  ├─ main.py
+│  ├─ oversight_twin.py
+│  ├─ paypal_client.py
+│  └─ model.py
+├─ integration/          # Enterprise settlement pipeline & merchant billing desk
+│  ├─ oversight_twin/    # Hub, store, CRM, LLM tools, pipeline
+│  └─ tests/
+├─ swarm-oversight/      # Multi-agent AI safety monitor & research suite
+│  ├─ swarm_oversight/   # Gateway, monitor, adversary models, frontiers
+│  ├─ results/           # Empirical evaluation logs and figures
+│  └─ tests/
+├─ tabletop-twin/        # Immersive XR client & backend forecasting twin
+│  ├─ backend/           # Forecasting engine, payment state machine, persona
+│  ├─ chain/             # Smart contracts and agent registries
+│  └─ web/               # Immersive Web SDK XR frontend
+├─ specs/                # Architectural & functional specifications
+├─ tests/                # Hackathon test suite
+├─ Dockerfile            # Multi-stage container build
+├─ docker-compose.yml    # Compose definition for API & dependencies
+└─ Tiltfile              # Local development cluster setup
 ```
 
-### 2. Install Python dependencies
+---
 
-From the repository root:
+## Installation & Running
+
+### 1. Install Dependencies
 
 ```bash
 python -m venv .venv
@@ -138,7 +137,7 @@ source .venv/bin/activate  # .venv\Scripts\activate on Windows
 pip install fastapi uvicorn httpx pytest pytest-requests
 ```
 
-### 3. Environment variables
+### 2. Environment Variables
 
 Create a `.env` file in the root directory:
 
@@ -146,78 +145,43 @@ Create a `.env` file in the root directory:
 # PayPal Sandbox credentials (required for real API calls)
 PAYPAL_CLIENT_ID=your-sandbox-client-id
 PAYPAL_SECRET=your-sandbox-secret
-
-# Optional: override monitor limits if desired
-# (the defaults are per_agent=100_000, per_payee=200_000, window=10, etc.)
 ```
 
-If `PAYPAL_CLIENT_ID` and `PAYPAL_SECRET` are not set the app will short‑circuit
-the PayPal call and return `state: UNKNOWN` — this allows you to test the
-oversight guard (`402 FAILED`) without needing real credentials.
+If `PAYPAL_CLIENT_ID` and `PAYPAL_SECRET` are not set, the app runs in safe mock mode for testing oversight guards.
 
-### 4. Start the service
-
-Using `docker-compose` (recommended):
+### 3. Run the Hackathon API
 
 ```bash
+# Docker Compose:
 docker-compose up --build api
-```
 
-Or directly with uvicorn:
-
-```bash
+# Or directly with Uvicorn:
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`.
-
-### 5. Test the endpoints
+### 4. Run the Tests
 
 ```bash
-# 1) Standard success (guard passes, mocked PayPal returns ORDER ID)
-curl -X POST "http://localhost:8000/api/v1/agents/charge" \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id":"agent-01","payee_id":"payee-01","amount_cents":5000,"mandate_cap_cents":100000}'
-
-# 2) Single agent over cap → 402 FAILED (guard blocks, no PayPal call)
-curl -X POST "http://localhost:8000/api/v1/agents/charge" \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id":"agent-01","payee_id":"payee-01","amount_cents":150000,"mandate_cap_cents":100000}'
-
-# 3) Swarm metrics
-curl -s "http://localhost:8000/api/v1/swarm/metrics"
-```
-
----
-
-## Test Suite
-
-Run the automated test suite:
-
-```bash
+# Hackathon API suite:
 pytest tests/test_hackathon_submission.py -v
+
+# Swarm oversight safety harness:
+pytest swarm-oversight/tests/ -v
+
+# Enterprise integration suite:
+pytest integration/tests/ -v
 ```
 
-**Covered scenarios:**
+### 5. Full Stack Development (Tilt & Tabletop Twin)
 
-| # | Scenario | Expected |
-|---|----------|----------|
-| 1 | **Standard Success** — single agent under mandate → HTTP 200, COMPLETED | ✅ |
-| 2 | **Negative Control 1** — single agent over cap → HTTP 402, FAILED (zero PayPal call) | ✅ |
-| 3 | **Negative Control 2** — collusive multi-agent split attack (A($40)+B($40)+C($30) vs cap $100) → Agent C throws `MoneyNotMoved`, state `FAILED`, zero HTTP calls to PayPal | ✅ |
-
-Each test isolates the session state and mocks the PayPal client so the suite
-runs deterministically without network credentials.
-
----
-
-## Full Stack Development with Tilt & Tabletop Twin
-
-Start with `tabletop-twin/README.md` and `tabletop-twin/backend/README.md` for XR and service guarantees.
-
-Requires Docker and Tilt:
-
+For the XR tabletop client and backend development:
 ```sh
 examples/common/certs/generate_ca.sh
 tilt up
 ```
+
+From `integration`:
+```sh
+python -m oversight_twin.showcase
+```
+Tells the whole story in one command, with every figure measured during the run.

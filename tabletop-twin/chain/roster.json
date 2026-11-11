@@ -1,0 +1,31 @@
+{
+  "owner": "firm-owner",
+  "agents": [
+    { "role": "engagement-partner", "title": "Engagement partner", "principal": "human-engagement-partner" },
+    { "role": "quality-review-partner", "title": "Quality management reviewer", "principal": "human-quality-reviewer" },
+    { "role": "independence-monitor", "title": "Independence monitor", "principal": "human-independence" },
+    { "role": "non-audit-assessor", "title": "Non-audit services assessor", "principal": "human-non-audit" },
+    { "role": "rotation-tracker", "title": "Partner rotation tracker", "principal": "human-rotation" },
+    { "role": "materiality-reviewer", "title": "Materiality reviewer", "principal": "human-materiality" },
+    { "role": "fraud-risk-assessor", "title": "Fraud risk assessor", "principal": "human-fraud-risk" },
+    { "role": "group-audit-coordinator", "title": "Group audit coordinator", "principal": "human-group-audit" },
+    { "role": "audit-committee-liaison", "title": "Audit committee liaison", "principal": "human-audit-committee" },
+    { "role": "aml-compliance-officer", "title": "AML compliance officer", "principal": "human-aml" },
+    { "role": "evidence-archivist", "title": "Working papers archivist", "principal": "human-archivist" },
+    { "role": "tender-administrator", "title": "Tender administrator", "principal": "human-tender" },
+    { "role": "contingent-fee-reviewer", "title": "Audit fee terms reviewer", "principal": "human-fee-terms" },
+    { "role": "multi-year-fee-reviewer", "title": "Multi-year fee assessor", "principal": "human-multi-year-fees" },
+    { "role": "transparency-report-reviewer", "title": "Transparency reporting reviewer", "principal": "human-transparency" },
+    { "role": "committee-report-reviewer", "title": "Audit committee reporting reviewer", "principal": "human-committee-report" },
+    { "role": "register-entry-reviewer", "title": "Public register custodian", "principal": "human-register" },
+    { "role": "sustainability-assurance-reviewer", "title": "Sustainability assurance independence reviewer", "principal": "human-sustainability-assurance" },
+    { "role": "vat-standard-rate-officer", "title": "VAT standard rate officer", "principal": "human-vat-standard" },
+    { "role": "vat-reduced-rate-officer", "title": "VAT reduced rate officer", "principal": "human-vat-reduced" },
+    { "role": "vat-rate-band-reviewer", "title": "VAT rate band reviewer", "principal": "human-vat-band" },
+    { "role": "delegation-standards-reviewer", "title": "Delegated standards reviewer", "principal": "human-delegation" },
+    { "role": "size-ceiling-reviewer", "title": "Undertaking size ceiling reviewer", "principal": "human-size-ceiling" },
+    { "role": "macro-inflation-reporter", "title": "Treasury inflation reporter", "principal": "human-treasury-inflation" },
+    { "role": "gdp-per-capita-reporter", "title": "Treasury output reporter", "principal": "human-treasury-output" },
+    { "role": "economic-sentiment-monitor", "title": "Treasury sentiment monitor", "principal": "human-treasury-sentiment" }
+  ]
+}

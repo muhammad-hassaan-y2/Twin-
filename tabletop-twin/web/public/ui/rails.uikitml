@@ -1,0 +1,128 @@
+<div id="RailCard" class="card">
+  <style>
+    .card {
+      display: flex;
+      flex-direction: column;
+      width: 56;
+      padding: 3.4;
+      gap: 1.6;
+      background-color: #10151c;
+      border-color: #33414f;
+      border-width: 0.7;
+      border-radius: 2.6;
+    }
+    .eyebrow {
+      font-size: 2;
+      font-weight: 700;
+      color: #9aa5b1;
+    }
+    .rail {
+      font-size: 3;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #f2e8c9;
+      text-align: left;
+    }
+    .from {
+      font-size: 2.2;
+      color: #7fb3d5;
+      text-align: left;
+    }
+    .divider {
+      height: 0.6;
+      background-color: #33414f;
+      border-radius: 0.3;
+    }
+    .pay {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7;
+    }
+    .payhead {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .state {
+      font-size: 1.9;
+      font-weight: 700;
+      color: #0e1116;
+      background-color: #9aa5b1;
+      padding-top: 0.6;
+      padding-bottom: 0.6;
+      padding-left: 1.4;
+      padding-right: 1.4;
+      border-radius: 1;
+    }
+    .how {
+      font-size: 2.2;
+      color: #f2e8c9;
+      text-align: right;
+    }
+    .whom {
+      font-size: 2.2;
+      line-height: 1.25;
+      color: #9aa5b1;
+      text-align: left;
+    }
+    .note {
+      font-size: 2;
+      line-height: 1.3;
+      color: #9aa5b1;
+      text-align: left;
+      width: 44;
+    }
+    .week {
+      font-size: 2;
+      line-height: 1.3;
+      color: #7fb3d5;
+      text-align: left;
+      width: 44;
+    }
+    .chase {
+      font-size: 2.2;
+      font-weight: 600;
+      color: #0e1116;
+      background-color: #7fb3d5;
+      border-color: #7fb3d5;
+      border-width: 0.5;
+      border-radius: 1.4;
+      padding-top: 1.5;
+      padding-bottom: 1.5;
+      padding-left: 2.6;
+      padding-right: 2.6;
+      cursor: pointer;
+    }
+  </style>
+  <span class="eyebrow">MONEY LEAVING THIS TABLE</span>
+  <span id="RailName" class="rail">sandbox</span>
+  <span id="RailFrom" class="from">USD, sent from US</span>
+  <div class="divider"></div>
+  <span id="Pay0" class="pay">
+    <span class="payhead">
+      <span id="PayState0" class="state">unknown</span>
+      <span id="PayHow0" class="how">USD 0.00</span>
+    </span>
+    <span id="PayWhom0" class="whom">nobody</span>
+  </span>
+  <span id="Pay1" class="pay">
+    <span class="payhead">
+      <span id="PayState1" class="state">unknown</span>
+      <span id="PayHow1" class="how">USD 0.00</span>
+    </span>
+    <span id="PayWhom1" class="whom">nobody</span>
+  </span>
+  <span id="Pay2" class="pay">
+    <span class="payhead">
+      <span id="PayState2" class="state">unknown</span>
+      <span id="PayHow2" class="how">USD 0.00</span>
+    </span>
+    <span id="PayWhom2" class="whom">nobody</span>
+  </span>
+  <span id="RailMore" class="note"></span>
+  <div class="divider"></div>
+  <span id="RailWeek" class="week">this week: nothing logged yet</span>
+  <span id="RailNote" class="note">Nothing is mid-flight.</span>
+  <button id="Btn-chase" class="chase">Ask the provider again</button>
+</div>

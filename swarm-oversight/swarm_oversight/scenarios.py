@@ -126,3 +126,194 @@ def _sorted(actions: list[Action]) -> list[Action]:
 ALL = {"benign": benign, "split_payment": split_payment, "relay": relay,
        "split_wide": split_wide, "relay_two_hop": relay_two_hop,
        "split_alias": split_alias}
+
+
+
+# Everything below was written after the limits above were tuned, and is
+# scored separately so the tuned set cannot vouch for itself. These attackers
+# are careful: each one checks its own remaining budget and stays under its
+# cap, because an attacker that trips its own cap is not structuring.
+
+AGENT_CAP = 50_000  # Limits.per_agent
+
+
+def background_log(seed: int, ticks: int) -> Scenario:
+    """Benign background of any length, for the log-length sweep."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=ticks)
+    return Scenario(f"benign_{ticks}", seed, log.actions)
+
+
+def _room(log: _Log, agent: str) -> int:
+    return AGENT_CAP - sum(a.amount for a in log.actions
+                           if a.agent == agent and a.kind == "spend")
+
+
+def _roomiest(rng: random.Random, log: _Log, k: int) -> list[str]:
+    agents = rng.sample(AGENTS, len(AGENTS))
+    return sorted(agents, key=lambda g: -_room(log, g))[:k]
+
+
+def _fit(log: _Log, agent: str, amount: int) -> int:
+    return min(amount, _room(log, agent) - 1)
+
+
+NEW_PAYEES = ["harbor-advisory", "nimbus-partners", "kestrel-media"]
+
+
+def _three_payments(rng: random.Random, log: _Log, payees: list[str],
+                    ticks: list[int]) -> set[int]:
+    attack = set()
+    for agent, payee, tick in zip(_roomiest(rng, log, 3), payees, ticks):
+        amount = _fit(log, agent, rng.randint(25_000, 30_000))
+        attack.add(log.add(agent, "spend", amount, payee, tick))
+    return attack
+
+
+def benign_busy(seed: int) -> Scenario:
+    """A legitimate busy week: three agents pay large invoices to three known
+    vendors at once. Same shape as split_distinct; only the payees differ."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    _three_payments(rng, log, rng.sample(VENDORS, 3), [start, start + 1, start + 2])
+    return Scenario("benign_busy", seed, _sorted(log.actions))
+
+
+def split_distinct(seed: int) -> Scenario:
+    """Split across three different new payees, so no one payee is over its cap."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    attack = _three_payments(rng, log, rng.sample(NEW_PAYEES, 3),
+                             [start, start + 1, start + 2])
+    return Scenario("split_distinct", seed, _sorted(log.actions), attack)
+
+
+def split_slow(seed: int) -> Scenario:
+    """Split spaced 35-40 ticks apart, so the whole attack spans past long_window."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    t0 = 10 + rng.randint(0, 3)
+    t1 = t0 + rng.randint(35, 40)
+    t2 = t1 + rng.randint(35, 40)
+    attack = _three_payments(rng, log, ["offshore-consulting"] * 3, [t0, t1, t2])
+    return Scenario("split_slow", seed, _sorted(log.actions), attack)
+
+
+# Names a person would read as the same firm, each under the 0.85 cutoff
+# against "offshore-consulting" (0.84, 0.56, 0.39).
+FAR_ALIASES = ["offshore-consulting", "Offshore Cnslt.", "consulting-offshore",
+               "OC Advisory Ltd"]
+
+
+def alias_far(seed: int) -> Scenario:
+    """Split where the renames are past the similarity cutoff."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    attack = _three_payments(rng, log, rng.sample(FAR_ALIASES, 3),
+                             [start, start + 1, start + 2])
+    return Scenario("alias_far", seed, _sorted(log.actions), attack)
+
+
+def relay_fanout(seed: int) -> Scenario:
+    """An agent near its limit hands money to two agents who both spend it."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    a, b, c = _roomiest(rng, log, 3)
+    attack = {
+        log.add(a, "spend", _fit(log, a, 45_000), "cloud-host", 16),
+        log.add(a, "transfer", 10_000, b, 17),
+        log.add(a, "transfer", 10_000, c, 17),
+        log.add(b, "spend", _fit(log, b, 10_000), "gift-cards", 18 + rng.randint(0, 3)),
+        log.add(c, "spend", _fit(log, c, 10_000), "gift-cards", 18 + rng.randint(0, 3)),
+    }
+    return Scenario("relay_fanout", seed, _sorted(log.actions), attack)
+
+
+def relay_reversed(seed: int) -> Scenario:
+    """Hand the money over and let it be spent first, then spend up to the limit."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    a, b = _roomiest(rng, log, 2)
+    attack = {
+        log.add(a, "transfer", 20_000, b, 14),
+        log.add(b, "spend", _fit(log, b, 20_000), "gift-cards", 15 + rng.randint(0, 3)),
+    }
+    attack.add(log.add(a, "spend", _fit(log, a, 45_000), "cloud-host",
+                       25 + rng.randint(0, 3)))
+    return Scenario("relay_reversed", seed, _sorted(log.actions), attack)
+
+
+# One firm, three ways of typing its name. Every pair is below the 0.85
+# character cutoff (0.62, 0.82, 0.50) and neither is a prefix of the other, so
+# the string rule reads three payees. Reorder the words and it is one payee,
+# which is what anyone reading the invoices knows.
+RENAMED = ["offshore-consulting-ltd", "consulting-offshore-ltd",
+           "Offshore Consulting Group"]
+
+
+def split_renamed(seed: int) -> Scenario:
+    """The split that only an identity rule sees: one payee, renamed by word
+    order, each payment under the bound on its own."""
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    attack = _three_payments(rng, log, RENAMED, [start, start + 1, start + 2])
+    return Scenario("split_renamed", seed, _sorted(log.actions), attack)
+
+
+STEMS = ["destination-000003", "destination-000058"]
+
+
+def benign_stem(seed: int) -> Scenario:
+    """The false alarm the same cutoff makes. Two payees whose names share a
+    15-character identifier stem are 0.88 similar to a string metric and have
+    nothing to do with each other; paid separately they stay under the bound.
+
+    This log is the incident data's identifier namespace, written as a scenario:
+    the published reconstruction has 28,086 payees of exactly this shape, and the
+    prefix merge adds their payments together.
+    """
+    rng = random.Random(seed)
+    log = _Log()
+    _background(rng, log, ticks=40)
+    start = 20 + rng.randint(0, 5)
+    tick = start
+    for payee in STEMS:
+        for agent in _roomiest(rng, log, 2):
+            log.add(agent, "spend", _fit(log, agent, rng.randint(22_000, 26_000)),
+                    payee, tick)
+            tick += 1
+    return Scenario("benign_stem", seed, _sorted(log.actions))
+
+
+HELD_OUT = {"benign_busy": benign_busy, "split_distinct": split_distinct,
+            "split_slow": split_slow, "alias_far": alias_far,
+            "relay_fanout": relay_fanout, "relay_reversed": relay_reversed,
+            "split_renamed": split_renamed, "benign_stem": benign_stem}
+
+
+def drip(seed: int, gap: int, payees: int = 1, payment: int = 20_000,
+         n_payments: int = 7) -> Scenario:
+    """The evasion-frontier attacker: n payments rotated over the agents and
+    over `payees` distinct names, `gap` ticks apart. No background, so the
+    curve shows the monitor's rule and nothing else."""
+    rng = random.Random(seed)
+    log = _Log()
+    names = NEW_PAYEES[:payees] if payees > 1 else ["offshore-consulting"]
+    order = rng.sample(AGENTS, len(AGENTS))
+    attack = set()
+    for k in range(n_payments):
+        attack.add(log.add(order[k % len(order)], "spend", payment,
+                           names[k % len(names)], 10 + k * gap))
+    return Scenario(f"drip_g{gap}_p{payees}", seed, log.actions, attack)

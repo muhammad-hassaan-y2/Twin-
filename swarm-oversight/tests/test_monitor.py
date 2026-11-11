@@ -1,3 +1,5 @@
+import pytest
+
 from swarm_oversight.harness import evaluate
 from swarm_oversight.model import Action
 from swarm_oversight.monitor import Limits, Monitor
@@ -94,3 +96,27 @@ def test_variants_are_caught_without_false_alarms():
     for name in ("split_wide", "relay_two_hop", "split_alias"):
         s = evaluate(range(50))[name]
         assert s.recall == 1.0 and s.false_alarm_rate == 0.0
+
+
+def test_a_rename_by_word_order_is_one_payee_to_the_words_rule_and_two_to_the_stem_rule():
+    """The cutoff reads characters, so a firm that types its own name in the
+    other order is a new supplier. Reading the words is the whole fix."""
+    renamed = ["offshore-consulting-ltd", "consulting-offshore-ltd",
+               "Offshore Consulting Group"]
+    log = [act(i, f"a{i}", "spend", 25_000, n, i) for i, n in enumerate(renamed)]
+    assert rules(log) == []                                    # three payees, no split
+    assert "split_payment" in rules(log, Limits(merge="tokens"))
+
+
+def test_two_payees_sharing_an_identifier_stem_are_not_one_payee():
+    """The same cutoff, pointed at the identifier namespace the published
+    reconstruction is full of, adds two unrelated suppliers into one breach."""
+    stem = ["destination-000003", "destination-000058"]        # 0.88 similar
+    log = [act(i, f"a{i}", "spend", 25_000, stem[i % 2], i) for i in range(4)]
+    assert "split_payment" in rules(log)
+    assert rules(log, Limits(merge="tokens")) == []
+
+
+def test_an_unknown_merge_rule_is_refused():
+    with pytest.raises(ValueError):
+        Monitor(Limits(merge="sounds_like")).review([act(0, "a", "spend", 1, "x")])

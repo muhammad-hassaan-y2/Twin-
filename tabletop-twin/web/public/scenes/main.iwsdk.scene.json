@@ -1,0 +1,265 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.96, 0.94, 0.9, 1],
+      "equator": [0.72, 0.7, 0.66, 1],
+      "ground": [0.42, 0.38, 0.34, 1],
+      "intensity": 0.45
+    }
+  },
+  "environment": {
+    "toneMapping": "aces",
+    "exposure": 1,
+    "shadows": true,
+    "shadowMapType": "pcf"
+  },
+  "resources": {},
+  "nodes": [
+    {
+      "id": "tabletop",
+      "name": "Tabletop",
+      "framingRole": "content",
+      "transform": { "position": [0, 0.72, -0.62] },
+      "components": {
+        "TwinState": { "day": 0, "horizonDays": 90, "pinchDay": -1 }
+      },
+      "children": [
+        {
+          "id": "table-shadow",
+          "name": "Table Shadow",
+          "transform": { "position": [0, 0.001, 0] },
+          "components": {
+            "ShadowCatcher": { "size": [1.8, 1.2], "opacity": 0.3 }
+          }
+        },
+        {
+          "id": "banks",
+          "name": "Banks",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "stones",
+          "name": "Stones",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "boats",
+          "name": "Boats",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "pipes",
+          "name": "Pipes",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "garden",
+          "name": "Garden",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "branches",
+          "name": "Branches",
+          "transform": { "position": [0, 0, 0] }
+        },
+        {
+          "id": "river",
+          "name": "River",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-river", "receiveShadow": true },
+          "transform": { "position": [0, 0, 0], "scale": [0.9, 1, 1] },
+          "components": {
+            "RiverFlow": { "dryAt": -1, "flow": 1 }
+          }
+        },
+        {
+          "id": "lake",
+          "name": "Savings Lake",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-lake", "castShadow": true, "receiveShadow": true },
+          "transform": { "position": [0.4, 0, -0.16] }
+        },
+        {
+          "id": "fork-ribbon",
+          "name": "Fork Ribbon",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-ribbon", "castShadow": true, "receiveShadow": true },
+          "transform": { "position": [0, 0.016, 0.005] },
+          "components": {
+            "ForkRibbon": { "branchId": "", "pull": 0 },
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "MoveFromTarget",
+              "returnToOrigin": true,
+              "translate": true,
+              "rotate": false,
+              "scale": false
+            }
+          }
+        },
+        {
+          "id": "time-wheel",
+          "name": "Time Wheel",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-wheel", "castShadow": true, "receiveShadow": true },
+          "transform": { "position": [-0.42, 0.01, 0.21], "scale": 0.82 },
+          "components": {
+            "TimeWheel": { "day": 0, "turnDeg": 0 },
+            "RayInteractable": {},
+            "OneHandGrabbable": {
+              "rotate": true,
+              "translate": false,
+              "rotateMin": [0, -6.2832, 0],
+              "rotateMax": [0, 6.2832, 0]
+            }
+          }
+        },
+        {
+          "id": "approval-token",
+          "name": "Approval Token",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-token", "castShadow": true, "receiveShadow": true },
+          "transform": { "position": [0.16, 0.008, 0.24] },
+          "components": {
+            "ApprovalPrompt": { "hold": 0, "armed": false },
+            "RayInteractable": {},
+            "OneHandGrabbable": { "rotate": false, "translate": true }
+          }
+        },
+        {
+          "id": "orb",
+          "name": "Twin Orb",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-orb", "receiveShadow": true },
+          "transform": { "position": [0.34, 0.16, 0.24] },
+          "components": {
+            "TwinOrb": { "mood": "idle", "accuracyPct": 0, "resolved": 0 },
+            "TableVoice": { "mood": "idle", "holdPct": 0, "waitingOn": 0 }
+          }
+        },
+        {
+          "id": "captions",
+          "name": "Captions",
+          "framingRole": "content",
+          "content": { "type": "asset", "asset": "twin-captions" },
+          "transform": { "position": [-0.02, 0.52, -0.42], "rotationDeg": [-10, 1, 0] },
+          "components": {
+            "RayInteractable": {}
+          }
+        },
+        {
+          "id": "approve",
+          "name": "Approve Panel",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-approve" },
+          "transform": { "position": [0.8, 0.5, -0.1], "rotationDeg": [-11, -25, 0] },
+          "components": {
+            "RayInteractable": {}
+          }
+        },
+        {
+          "id": "rails",
+          "name": "Rails Panel",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-rails" },
+          "transform": { "position": [-0.86, 0.48, -0.34], "rotationDeg": [-11, 24, 0] },
+          "components": {
+            "RayInteractable": {}
+          }
+        },
+        {
+          "id": "firm",
+          "name": "Firm Panel",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-firm" },
+          "transform": { "position": [-0.86, 1.04, -0.3], "rotationDeg": [-14, 24, 0] },
+          "components": {
+            "FirmPanel": {
+              "onChain": false,
+              "hired": 0,
+              "refusedRoles": 0,
+              "derived": 0,
+              "figures": 0,
+              "engagement": -1,
+              "engagements": 0,
+              "opened": 0,
+              "refusedWrites": 0,
+              "waiting": 0
+            },
+            "RayInteractable": {}
+          }
+        },
+        {
+          "id": "wheel-plate",
+          "name": "Time Wheel Plate",
+          "framingRole": "support",
+          "content": { "type": "asset", "asset": "twin-wheel-plate" },
+          "transform": { "position": [-0.36, 0.22, 0.3], "rotationDeg": [-26, 16, 0] }
+        }
+      ]
+    },
+    {
+      "id": "key-light",
+      "name": "Key Light",
+      "transform": {
+        "position": [-1.6, 4.2, 1.2],
+        "rotationDeg": [-70, -20, 0]
+      },
+      "components": {
+        "DirectionalLight": {
+          "color": [1, 0.95, 0.88, 1],
+          "intensity": 1.8,
+          "castShadow": true,
+          "shadowMapSize": "1024",
+          "shadowCameraSize": 2.5,
+          "shadowCameraNear": 1,
+          "shadowCameraFar": 12,
+          "shadowRadius": 4,
+          "shadowBias": -0.0004,
+          "shadowNormalBias": 0.01
+        }
+      }
+    },
+    {
+      "id": "fill-light",
+      "name": "Fill Light",
+      "components": {
+        "HemisphereLight": {
+          "skyColor": [0.95, 0.94, 0.9, 1],
+          "groundColor": [0.5, 0.46, 0.42, 1],
+          "intensity": 0.85
+        }
+      }
+    }
+  ],
+  "authoring": {
+    "views": [
+      {
+        "id": "hero",
+        "role": "hero",
+        "projection": "perspective",
+        "position": [0, 1.55, 1.62],
+        "target": [0, 1.05, -0.62],
+        "fov": 55
+      },
+      {
+        "id": "spawn",
+        "role": "diagnostic",
+        "projection": "perspective",
+        "position": [0, 1.6, 0],
+        "target": [0, 0.74, -0.62],
+        "fov": 70
+      },
+      {
+        "id": "top",
+        "role": "diagnostic",
+        "projection": "orthographic",
+        "position": [0, 2.4, -0.62],
+        "target": [0, 0.72, -0.62],
+        "height": 1.3
+      }
+    ]
+  }
+}
