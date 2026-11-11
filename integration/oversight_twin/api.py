@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 from swarm_oversight.monitor import Limits
 from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
 
+from .commerce import BillingBook, Invoice, SimulatedMerchant
+from .commerce_tools import CommerceTools, review_records
 from .pipeline import Pipeline
 
 RAILS = {"paypal": "paypal-sandbox", "simulated": "simulated"}
@@ -31,6 +33,20 @@ class RunIn(BaseModel):
 
 class ClearIn(BaseModel):
     agreements: list[str] = Field(min_length=1, max_length=500)
+
+
+class BillingIn(BaseModel):
+    dataset_id: str = Field(min_length=1, max_length=120)
+    records: list[dict[str, Any]] = Field(min_length=1, max_length=500)
+
+
+class CaptureIn(BaseModel):
+    approved_by: str = Field(min_length=1, max_length=120)
+
+
+class ToolIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class SettlementService:
@@ -74,6 +90,67 @@ class SettlementService:
 
     def describe(self) -> dict[str, Any]:
         return {"rail": self.rail, "recovery": "in-memory", "payee_configured": True}
+
+
+class BillingService:
+    """Client invoices for one merchant: priced from the review, opened and captured on PayPal."""
+
+    def __init__(self, transport: object, *, merchant: str, rail: str,
+                 currency: str = "USD") -> None:
+        self.book = BillingBook(transport, merchant=merchant, currency=currency)
+        self.rail = rail
+        self._engagements: dict[str, dict[str, Any]] = {}
+
+    def prepare(self, dataset_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+        engagements = review_records(records, dataset_id=dataset_id,
+                                     currency=self.book.currency)
+        self._engagements[dataset_id] = engagements
+        for entry in engagements.values():
+            priced = entry["invoice"]
+            if priced is None:
+                continue
+            self.book.prepare(Invoice(
+                id=priced["id"], engagement_id=priced["engagement_id"],
+                client=priced["client"], amount_cents=priced["amount_cents"],
+                currency=priced["currency"], description=priced["description"],
+                due_in_days=priced["due_in_days"]))
+        priced_count = sum(1 for entry in engagements.values() if entry["invoice"])
+        return {
+            "dataset_id": dataset_id,
+            "rail": self.rail,
+            "engagements": list(engagements.values()),
+            "priced": priced_count,
+            "refused": len(engagements) - priced_count,
+            "book": self.book.summary(),
+        }
+
+    def open(self, invoice_id: str) -> dict[str, Any]:
+        return self.book.open_prepared(invoice_id)
+
+    def status(self, invoice_id: str) -> dict[str, Any]:
+        return self.book.status(invoice_id)
+
+    def capture(self, invoice_id: str, approved_by: str) -> dict[str, Any]:
+        return self.book.capture(invoice_id, approved_by=approved_by)
+
+    def invoices(self) -> dict[str, Any]:
+        return {"invoices": self.book.invoices(), "book": self.book.summary()}
+
+    def summary(self) -> dict[str, Any]:
+        return self.book.summary()
+
+    def _engagements_across_datasets(self) -> dict[str, dict[str, Any]]:
+        return {key: entry for engagements in self._engagements.values()
+                for key, entry in engagements.items()}
+
+    def tools(self) -> list[dict[str, Any]]:
+        return CommerceTools(self.book, self._engagements_across_datasets()).catalog()
+
+    def tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        return CommerceTools(self.book, self._engagements_across_datasets()).call(name, arguments)
+
+    def describe(self) -> dict[str, Any]:
+        return {"rail": self.rail, "merchant": self.book.merchant, "recovery": "in-memory"}
 
 
 def limits_from_env() -> tuple[Limits | None, str]:
@@ -125,13 +202,30 @@ def service_from_env() -> tuple[SettlementService | None, str]:
     return SettlementService(factory, rail=rail), ""
 
 
+def billing_from_env() -> tuple[BillingService | None, str]:
+    """A merchant book on the same rail the runs use. Simulated mode labels itself."""
+    transport, rail, why = transport_from_env()
+    if transport is None:
+        return None, why
+    merchant = os.environ.get("OVERSIGHT_PAYEE", "").strip()
+    if not merchant:
+        return None, "set OVERSIGHT_PAYEE to the merchant that receives these invoices"
+    if rail == RAILS["simulated"]:
+        transport = SimulatedMerchant()
+    return BillingService(transport, merchant=merchant, rail=rail), ""
+
+
 def create_app(*, token: str | None = None, service: SettlementService | None = None,
-               reason: str = "") -> FastAPI:
-    app = FastAPI(title="Oversight Twin Pipeline", version="0.1.0")
+               reason: str = "", billing: BillingService | None = None,
+               billing_reason: str = "") -> FastAPI:
+    app = FastAPI(title="Oversight Twin Pipeline", version="0.2.0")
     app.state.token = token if token is not None else os.environ.get("OVERSIGHT_API_TOKEN", "")
     app.state.service = service
     app.state.reason = reason or ("the pipeline service is not configured"
                                   if service is None else "")
+    app.state.billing = billing
+    app.state.billing_reason = billing_reason or ("billing is not configured"
+                                                  if billing is None else "")
 
     def auth(authorization: str = Header(default="")) -> None:
         expected = app.state.token
@@ -146,12 +240,18 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=503, detail=app.state.reason)
         return app.state.service
 
+    def require_billing() -> BillingService:
+        if app.state.billing is None:
+            raise HTTPException(status_code=503, detail=app.state.billing_reason)
+        return app.state.billing
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         service = app.state.service
         if service is None:
             return {"status": "unconfigured", "why": app.state.reason}
-        return {"status": "ok", **service.describe(), "token_configured": bool(app.state.token)}
+        return {"status": "ok", **service.describe(), "token_configured": bool(app.state.token),
+                "billing": "ok" if app.state.billing else "unconfigured"}
 
     @app.post("/v1/runs")
     def run(body: RunIn, _: None = Depends(auth),
@@ -179,8 +279,70 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # ----------------------------------------------------------------- billing
+
+    @app.post("/v1/billing/prepare")
+    def billing_prepare(body: BillingIn, _: None = Depends(auth),
+                        billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        try:
+            return billing.prepare(body.dataset_id, body.records)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/v1/billing/invoices")
+    def billing_invoices(_: None = Depends(auth),
+                         billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        return billing.invoices()
+
+    @app.get("/v1/billing/invoices/{invoice_id}")
+    def billing_status(invoice_id: str, _: None = Depends(auth),
+                       billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        try:
+            return billing.status(invoice_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="no such invoice") from exc
+
+    @app.post("/v1/billing/invoices/{invoice_id}/open")
+    def billing_open(invoice_id: str, _: None = Depends(auth),
+                     billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        try:
+            return billing.open(invoice_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="no such priced invoice") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/v1/billing/invoices/{invoice_id}/capture")
+    def billing_capture(invoice_id: str, body: CaptureIn, _: None = Depends(auth),
+                        billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        try:
+            return billing.capture(invoice_id, body.approved_by)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="no such invoice") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/v1/billing/summary")
+    def billing_summary(_: None = Depends(auth),
+                        billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        return billing.summary()
+
+    # ------------------------------------------------- the assistant's tool surface
+
+    @app.get("/v1/billing/tools")
+    def billing_tools(_: None = Depends(auth),
+                      billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        return {"tools": billing.tools()}
+
+    @app.post("/v1/billing/tool")
+    def billing_tool(body: ToolIn, _: None = Depends(auth),
+                     billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        return billing.tool(body.name, body.arguments)
+
     return app
 
 
 _service_from_env, _why = service_from_env()
-app = create_app(service=_service_from_env, reason=_why)
+_billing_from_env, _billing_why = billing_from_env()
+app = create_app(service=_service_from_env, reason=_why,
+                 billing=_billing_from_env, billing_reason=_billing_why)

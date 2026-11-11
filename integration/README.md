@@ -1,8 +1,9 @@
 # Oversight Twin
 
-A PayPal-centred settlement hub for the twin's audit, tax and finance agents.
-One payment machine and one principal-wide swarm monitor sit behind every fee.
-The chain records agreements; PayPal handles the payment, not the legal opinion.
+A PayPal-centred settlement hub for the twin's audit, tax and finance agents, plus the
+merchant side of the same firm: audited engagements are billed to clients and collected
+through PayPal. One payment machine and one principal-wide swarm monitor sit behind every
+fee. The chain records agreements; PayPal handles the payment, not the legal opinion.
 This branch extends tabletop-twin without changing swarm-oversight.
 
 ## Settlement
@@ -66,11 +67,38 @@ python -m uvicorn oversight_twin.api:app
   clearances.
 - `GET /v1/runs/{run_id}` returns a run's latest state.
 - `POST /v1/runs/{run_id}/clear` clears named instructions in a run.
+- `POST /v1/billing/prepare` prices reviewed engagements into client invoices.
+- `GET /v1/billing/invoices` and `GET /v1/billing/invoices/{id}` read the book.
+- `POST /v1/billing/invoices/{id}/open` creates the PayPal order for a priced invoice.
+- `POST /v1/billing/invoices/{id}/capture` captures a buyer-approved payment.
+- `GET /v1/billing/summary` reports billed, collected and outstanding.
+- `GET /v1/billing/tools` and `POST /v1/billing/tool` expose the assistant surface.
 
 Unknown runs are 404, unknown agreements and invalid bodies are 422, and with no
 rail, no payee, no aggregate bound or no token the service answers 503 with the
 missing setting rather than falling back to a simulated rail. The `paypal` rail
 still accepts only sandbox credentials; live capture is refused.
+
+## Billing for businesses
+
+A reviewed engagement can be sold as well as paid for. An invoice is priced at the
+firm's own fee from the case and its 26 findings; a breach, an unreviewed engagement
+or a zero fee is refused rather than billed. The merchant book keeps one PayPal order
+per invoice, records the approval link, captures only after the buyer approves, and
+captures once. A lost reply becomes `unknown` and is reconciled by reading the known
+order, never by creating or charging a second one. Billed, collected, outstanding and
+the invoices that still need a person are reported together.
+
+The assistant surface is a small JSON-Schema tool catalogue: list, price, open,
+status, capture and summary. A model may price and open, but it cannot supply an
+amount - extra arguments such as `amount_cents` are ignored and reported - and it
+cannot capture without `approved_by`, the name of the person who approved the
+payment. The tool dispatcher, not the schema, is the authority on every argument.
+
+With no credentials the simulated merchant auto-approves orders and moves no money;
+the rail label says so. Real capture still needs PayPal sandbox keys and a buyer
+approval obtained at PayPal, which this process does not simulate for the merchant
+rail.
 
 ## EU evidence
 
