@@ -4,6 +4,8 @@ A PayPal-centred settlement hub for the twin's audit, tax and finance agents, pl
 merchant side of the same firm: audited engagements are billed to clients and collected
 through PayPal. One payment machine and one principal-wide swarm monitor sit behind every
 fee. The chain records agreements; PayPal handles the payment, not the legal opinion.
+A Gemini assistant can run the billing desk through server-priced tools, and the book's
+money state is durable in PostgreSQL when a database is configured.
 This branch extends tabletop-twin without changing swarm-oversight.
 
 ## Settlement
@@ -57,12 +59,15 @@ export OVERSIGHT_RAIL=paypal              # or simulated, which is labelled as s
 export OVERSIGHT_PAYEE="Ashgrove Audit LLP"
 export OVERSIGHT_PER_AGENT_LIMIT_CENTS=50000
 export OVERSIGHT_PER_PAYEE_LIMIT_CENTS=60000
-# OVERSIGHT_WINDOW=10 and OVERSIGHT_LONG_WINDOW=60 are optional
+# optional: OVERSIGHT_WINDOW=10, OVERSIGHT_LONG_WINDOW=60
+# optional: OVERSIGHT_DATABASE_URL=postgresql://... (durable book; schema defaults to oversight)
+# optional: GEMINI_API_KEY=... and GEMINI_MODEL=... (the assistant and invoice copy)
 python -m uvicorn oversight_twin.api:app
 ```
 
-- `GET /health` is unauthenticated and reports only the rail, recovery model and
-  whether a token and payee are configured; it never echoes the token.
+- `GET /health` is unauthenticated and reports only the rail, the billing store kind,
+  whether a model is configured and whether a token and payee are set; it never echoes
+  the token or any key.
 - `POST /v1/runs` audits a dataset's records and optionally applies named
   clearances.
 - `GET /v1/runs/{run_id}` returns a run's latest state.
@@ -73,6 +78,7 @@ python -m uvicorn oversight_twin.api:app
 - `POST /v1/billing/invoices/{id}/capture` captures a buyer-approved payment.
 - `GET /v1/billing/summary` reports billed, collected and outstanding.
 - `GET /v1/billing/tools` and `POST /v1/billing/tool` expose the assistant surface.
+- `POST /v1/billing/ask` lets the configured model use those tools to answer a question.
 
 Unknown runs are 404, unknown agreements and invalid bodies are 422, and with no
 rail, no payee, no aggregate bound or no token the service answers 503 with the
@@ -99,6 +105,31 @@ With no credentials the simulated merchant auto-approves orders and moves no mon
 the rail label says so. Real capture still needs PayPal sandbox keys and a buyer
 approval obtained at PayPal, which this process does not simulate for the merchant
 rail.
+
+### Durable book state
+
+Without a configuration the book lives in process memory, and `/health` says so.
+Set `OVERSIGHT_DATABASE_URL` to a PostgreSQL DSN and the book's invoices, payment
+entries, conflicts and reviewed engagements are written to a dedicated schema
+(default `oversight`, override with `OVERSIGHT_DB_SCHEMA`). A new process reads the
+book the old one left: reopening a priced invoice returns its existing order instead
+of raising a second one, and a captured payment keeps the name of the person who
+approved it. The database is touched on the first billing operation, not at import,
+and a configured database that cannot be used fails the request with 503 rather than
+quietly continuing in memory. Each entry's state is constrained in the database to
+the states the book defines. Settlement runs and the agent-fee hub journal are still
+in process memory; only the merchant book is durable.
+
+### Gemini assistant
+
+Set `GEMINI_API_KEY` in the environment to enable two optional surfaces. Invoice
+copy may be reworded by the model, but a reply is used only when every number in it
+is already on the invoice; otherwise the firm's own sentence is used and the route
+says why. The assistant may call the same six billing tools a person can, and the
+dispatcher still refuses what a model must not do: amounts come from the review, and
+a capture needs the name of a human approver supplied by the caller - the name the
+model writes into the call is overridden. A model fault is a 502, not a billing
+outcome; without a key the assistant endpoint is 503.
 
 ## EU evidence
 
@@ -140,6 +171,20 @@ HTTP fake, human and chain gates, shared-payee limits, repeated calls, missing
 facts, and sandbox-only configuration. With Node and chain dependencies present,
 the suite also runs the local EVM-to-PayPal-to-EVM path using a temporary journal.
 
+The billing, store and assistant tests run offline against a localhost fake for the
+model endpoint and an in-memory store. The PostgreSQL tests run only when a database
+is named, so a clean checkout never needs one:
+
+```sh
+pip install '.[postgres]'
+OVERSIGHT_TEST_DATABASE_URL=postgresql://... python -m pytest -q tests/test_store.py
+```
+
+They check what the memory store cannot prove: a second store object sees the first
+one's order, a captured entry keeps its approver, a state outside the known set is
+rejected by the database, merchants are isolated, and a re-prepare replaces a
+dataset's engagements.
+
 The aggregate experiment submits three payments of 25,000 minor units to one
 payee against a 60,000 bound. With oversight, 50,000 settles; removing the bound
 lets all 75,000 settle. The demo also adds a legitimate 20,000 payment to a second
@@ -180,10 +225,13 @@ accounting label, **not** a PayPal payout destination. No arbitrary-agent payout
 VAT filing, national tax certification or browser checkout is implemented.
 
 The local chain uses deterministic demonstration keys. `HumanGate` is a trusted
-caller's clearance interface, not authentication. The payment journal and order-ID
-mapping are in memory; crash-safe recovery, distributed locking, durable approval
-storage and an atomic transaction across PayPal and the chain are not claimed.
-Never restart or create a new payment to resolve an unknown outcome.
+caller's clearance interface, not authentication. The agent-fee hub's payment journal
+and order-ID mapping are in process memory; an atomic transaction across PayPal, the
+chain and the database is not claimed. For billing, a durable book survives a
+restart, but a crash between the provider's answer and the store write leaves that
+invoice `unknown` until reconciliation - the same invoice key is replayed, never
+recharged. Distributed locking and multi-process writers are not claimed. Never
+create a new payment to resolve an unknown outcome.
 
 The pipeline's runs and clearance state are likewise in memory: a restart forgets
 runs, while the PayPal order memory goes with the transport it belongs to. The
@@ -192,5 +240,8 @@ person cleared a payment. The CRM adapters read files - there is no vendor API
 client, webhook receiver, schema registry or retry queue - and outcome lines are
 appended, not reconciled against a CRM record. Quality checks are structural: they
 find contradictions and missing facts, not the correctness of the facts a CRM was
-told.
+told. The assistant is bounded by its tools, not by trust in the model: it may read
+and act on the book, but it cannot set an amount or approve a capture, and stopping
+it is the approver's decision. No live Gemini call is verified by the offline suite;
+the tests prove the wire format and the refusals, not a live model's behaviour.
 
