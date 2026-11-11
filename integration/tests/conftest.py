@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import tempfile
 from pathlib import Path
@@ -37,3 +38,19 @@ def scratch():
         yield Path(directory)
     finally:
         shutil.rmtree(directory, ignore_errors=True)
+
+
+@pytest.fixture
+def paypal():
+    """The localhost HTTP fake the real PayPal transport talks to, started for one test."""
+    path = (Path(__file__).resolve().parents[2]
+            / "tabletop-twin" / "backend" / "tests" / "fake_paypal.py")
+    spec = importlib.util.spec_from_file_location("fake_paypal_pipeline", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    fake = module.FakePayPal()
+    fake.start()
+    try:
+        yield fake
+    finally:
+        fake.stop()

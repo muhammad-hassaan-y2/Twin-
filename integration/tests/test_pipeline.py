@@ -10,7 +10,7 @@ import pytest
 
 from oversight_twin.pipeline import Pipeline, parse_record
 from swarm_oversight.monitor import Limits
-from twin.payments.paypal import SandboxTransport
+from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
 
 OPEN = Limits(per_agent=10**9, per_payee=10**9, window=10, long_window=60, merge="both")
 
@@ -155,6 +155,23 @@ def test_missing_jurisdiction_is_review_not_a_guess(base_record):
     assert "jurisdiction_missing" in report["quality"]["issue_codes"]
     assert record["payable"] > 0
     assert transport.charge_calls == 0
+
+
+def test_the_pipeline_settles_through_the_real_paypal_transport(base_record, paypal):
+    config = PayPalConfig(client_id=paypal.client_id, secret=paypal.secret,
+                          test_server_url=paypal.url)
+    pipe = Pipeline(PayPalTransport(config), dataset_id="crm-2026",
+                    payee="Ashgrove Audit LLP", limits=OPEN, rail="paypal")
+    report = pipe.run([base_record()])
+    ids = instruction_ids(report)
+    assert ids
+    assert paypal.create_calls == 0
+
+    after = pipe.clear(report["run_id"], ids)
+    assert after["settlement"]["settled"] == len(ids)
+    assert after["settlement"]["settled_cents"] == 20_000 * len(ids)
+    assert paypal.captured_cents == 20_000 * len(ids)
+    assert all(row["provider_ref"] for row in after["records"][0]["agreements"])
 
 
 def test_a_dataset_must_name_its_payee_and_currency():
