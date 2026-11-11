@@ -9,6 +9,12 @@ Two stores behind one shape. `MemoryStore` is the honest default for tests and d
 the old one left. Nothing connects or creates a schema at import: a configured database is
 touched on the first billing operation, and if it cannot be reached that operation fails closed
 instead of quietly continuing in memory.
+
+The PostgreSQL store is written for a pooled serverless database (Neon and the like). It keeps
+no session state: every operation is one short-lived connection running one explicit
+transaction, server-side prepared statements are disabled because a transaction pooler may
+hand the next statement a different server session, and schema creation is guarded by an
+advisory lock that lasts only as long as that transaction.
 """
 from __future__ import annotations
 
@@ -92,10 +98,10 @@ class MemoryStore:
 
 
 class PostgresStore:
-    """The same records in PostgreSQL. One connection per operation, autocommit.
+    """The same records in PostgreSQL, one short-lived connection per operation.
 
-    Simple on purpose: a single-process prototype does not need a pool, and a connection that
-    lives only for one statement cannot hand a half-finished transaction to the next request.
+    No pool of its own: a connection that serves one transaction cannot hand a half-finished
+    transaction to the next request, and on a pooled provider the provider is already the pool.
     """
 
     def __init__(self, dsn: str, *, schema: str = "oversight",
@@ -111,50 +117,69 @@ class PostgresStore:
         self._lock = threading.Lock()
 
     def ensure(self) -> None:
-        """Create the schema and tables this store needs. Touched only when first used."""
+        """Create the schema and tables this store needs. Touched only when first used.
+
+        The whole DDL runs in one explicit transaction holding a transaction-scoped advisory
+        lock. A session-scoped lock would be wrong here: on a transaction pooler the next
+        transaction may run on a different server session, and the lock would sit on a
+        connection this process no longer holds. The transaction-scoped lock is released on
+        commit, rollback or a dropped connection, so two cold-starting processes cannot race
+        `CREATE SCHEMA IF NOT EXISTS` into a duplicate-schema error.
+        """
         if self._ready:
             return
         with self._lock:
             if self._ready:
                 return
             sql = self._sql()
-            with self._connection() as conn:
-                conn.execute(sql("CREATE SCHEMA IF NOT EXISTS {schema}"))
-                conn.execute(sql("""
-                    CREATE TABLE IF NOT EXISTS {schema}.book_invoices (
-                        merchant text NOT NULL,
-                        invoice_id text NOT NULL,
-                        invoice jsonb NOT NULL,
-                        updated_at timestamptz NOT NULL DEFAULT now(),
-                        PRIMARY KEY (merchant, invoice_id)
-                    )"""))
-                conn.execute(sql("""
-                    CREATE TABLE IF NOT EXISTS {schema}.book_entries (
-                        merchant text NOT NULL,
-                        invoice_id text NOT NULL,
-                        state text NOT NULL CHECK (state IN (
-                            'awaiting_buyer', 'awaiting_capture', 'captured', 'unknown', 'failed')),
-                        entry jsonb NOT NULL,
-                        updated_at timestamptz NOT NULL DEFAULT now(),
-                        PRIMARY KEY (merchant, invoice_id)
-                    )"""))
-                conn.execute(sql("""
-                    CREATE TABLE IF NOT EXISTS {schema}.book_conflicts (
-                        merchant text NOT NULL,
-                        invoice_id text NOT NULL,
-                        entry jsonb NOT NULL,
-                        updated_at timestamptz NOT NULL DEFAULT now(),
-                        PRIMARY KEY (merchant, invoice_id)
-                    )"""))
-                conn.execute(sql("""
-                    CREATE TABLE IF NOT EXISTS {schema}.book_engagements (
-                        merchant text NOT NULL,
-                        dataset_id text NOT NULL,
-                        engagement_key text NOT NULL,
-                        entry jsonb NOT NULL,
-                        updated_at timestamptz NOT NULL DEFAULT now(),
-                        PRIMARY KEY (merchant, dataset_id, engagement_key)
-                    )"""))
+            with self._connection(autocommit=False) as conn:
+                try:
+                    conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s)::bigint)",
+                                 (f"oversight-twin:{self.schema}",))
+                    conn.execute(sql("CREATE SCHEMA IF NOT EXISTS {schema}"))
+                    conn.execute(sql("""
+                        CREATE TABLE IF NOT EXISTS {schema}.book_invoices (
+                            merchant text NOT NULL,
+                            invoice_id text NOT NULL,
+                            invoice jsonb NOT NULL,
+                            updated_at timestamptz NOT NULL DEFAULT now(),
+                            PRIMARY KEY (merchant, invoice_id)
+                        )"""))
+                    conn.execute(sql("""
+                        CREATE TABLE IF NOT EXISTS {schema}.book_entries (
+                            merchant text NOT NULL,
+                            invoice_id text NOT NULL,
+                            state text NOT NULL CHECK (state IN (
+                                'awaiting_buyer', 'awaiting_capture', 'captured',
+                                'unknown', 'failed')),
+                            entry jsonb NOT NULL,
+                            updated_at timestamptz NOT NULL DEFAULT now(),
+                            PRIMARY KEY (merchant, invoice_id)
+                        )"""))
+                    conn.execute(sql("""
+                        CREATE TABLE IF NOT EXISTS {schema}.book_conflicts (
+                            merchant text NOT NULL,
+                            invoice_id text NOT NULL,
+                            entry jsonb NOT NULL,
+                            updated_at timestamptz NOT NULL DEFAULT now(),
+                            PRIMARY KEY (merchant, invoice_id)
+                        )"""))
+                    conn.execute(sql("""
+                        CREATE TABLE IF NOT EXISTS {schema}.book_engagements (
+                            merchant text NOT NULL,
+                            dataset_id text NOT NULL,
+                            engagement_key text NOT NULL,
+                            entry jsonb NOT NULL,
+                            updated_at timestamptz NOT NULL DEFAULT now(),
+                            PRIMARY KEY (merchant, dataset_id, engagement_key)
+                        )"""))
+                    conn.commit()
+                except Exception as error:
+                    try:
+                        conn.rollback()  # also releases the advisory lock
+                    except Exception:
+                        pass  # a dropped connection releases it server-side
+                    _reraise(error)
             self._ready = True
 
     def load(self, merchant: str) -> BookSnapshot:
@@ -220,15 +245,22 @@ class PostgresStore:
         return lambda text: psycopg.sql.SQL(text).format(
             schema=psycopg.sql.Identifier(self.schema))
 
-    def _connection(self):
+    def _connection(self, *, autocommit: bool = True):
         try:
             import psycopg
         except ImportError as error:  # pragma: no cover - depends on the environment
             raise StoreUnavailable(
                 "durable state needs psycopg: pip install 'oversight-twin[postgres]'") from error
         try:
-            return _Closing(psycopg.connect(self.dsn, autocommit=True,
-                                            connect_timeout=self.connect_timeout))
+            # prepare_threshold=None disables psycopg's automatic server-side prepared
+            # statements. A transaction pooler (Neon's -pooler endpoint) can run consecutive
+            # transactions of one client on different server sessions, where a prepared
+            # statement name that the client believes exists does not. No session state, no
+            # "prepared statement does not exist" under load.
+            return _Closing(psycopg.connect(self.dsn, autocommit=autocommit,
+                                            connect_timeout=self.connect_timeout,
+                                            prepare_threshold=None,
+                                            application_name="oversight-twin"))
         except psycopg.Error as error:
             raise StoreUnavailable(
                 f"the configured database is unreachable ({type(error).__name__})") from error

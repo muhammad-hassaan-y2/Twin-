@@ -120,6 +120,22 @@ quietly continuing in memory. Each entry's state is constrained in the database 
 the states the book defines. Settlement runs and the agent-fee hub journal are still
 in process memory; only the merchant book is durable.
 
+Neon is the intended host: put its pooled `-pooler` DSN, which carries
+`sslmode=require`, in `OVERSIGHT_DATABASE_URL`. The store is written for a
+transaction pooler - it holds no session state, disables server-side prepared
+statements so one cannot outlive the server session that prepared it, and creates
+its schema once under a transaction-scoped advisory lock so concurrent cold starts
+cannot collide. Give each environment its own schema (`OVERSIGHT_DB_SCHEMA`) or its
+own Neon branch; dropping the schema drops that book. A suspended compute wakes on
+the first billing operation, which is why that operation, not the import, pays the
+connect cost; an unreachable database is still a 503, never a silent memory
+fallback. Point the store tests at a disposable branch - each Postgres test makes
+and drops a throwaway schema, so the branch needs only the right to create schemas:
+
+```sh
+OVERSIGHT_TEST_DATABASE_URL='postgresql://...-pooler...' python -m pytest -q tests/test_store.py
+```
+
 ### Gemini assistant
 
 Set `GEMINI_API_KEY` in the environment to enable two optional surfaces. Invoice

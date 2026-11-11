@@ -7,6 +7,7 @@ with a real server in between.
 from __future__ import annotations
 
 import os
+import threading
 import uuid
 
 import pytest
@@ -240,4 +241,90 @@ def test_postgres_engagements_come_back_for_the_assistant(base_record):
                                   store=PostgresStore(PG, schema=schema))
         assert [row["external_id"] for row in replaced.tool("billing_list", {})["result"]] == ["B2"]
     finally:
+        _drop(schema)
+
+
+@needs_postgres
+def test_concurrent_cold_starts_create_the_schema_once():
+    # Cold-starting processes racing to create the same schema on a pooled database. The
+    # transaction-scoped advisory lock serializes the DDL; without it, CREATE SCHEMA IF NOT
+    # EXISTS can still lose the race inside PostgreSQL and raise duplicate_schema.
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    threads_n = 6
+    start = threading.Barrier(threads_n)
+    failures: list[BaseException] = []
+
+    def cold_start(index: int) -> None:
+        try:
+            store = PostgresStore(PG, schema=schema)
+            start.wait(timeout=10)
+            store.load("Ashgrove Audit LLP")
+            store.save_entry("Ashgrove Audit LLP", {
+                "invoice": {"id": f"inv-{index}"}, "state": "awaiting_buyer"})
+        except BaseException as error:  # noqa: BLE001 - reported on the main thread
+            failures.append(error)
+
+    try:
+        workers = [threading.Thread(target=cold_start, args=(index,))
+                   for index in range(threads_n)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=60)
+        assert failures == []
+        snapshot = PostgresStore(PG, schema=schema).load("Ashgrove Audit LLP")
+        assert sorted(row["invoice"]["id"] for row in snapshot.entries) == [
+            f"inv-{index}" for index in range(threads_n)]
+    finally:
+        _drop(schema)
+
+
+@needs_postgres
+def test_schema_creation_waits_on_the_transaction_lock():
+    # The deterministic control for the lock in ensure(): another transaction holds the same
+    # advisory key, so a cold start must be seen waiting on it. Delete the lock statement and
+    # the cold start creates the schema immediately, which is exactly the race the test above
+    # exercises (raw concurrent CREATE SCHEMA IF NOT EXISTS collided in 30 of 30 measured runs).
+    import time
+
+    import psycopg
+
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    worker: threading.Thread | None = None
+    try:
+        with psycopg.connect(PG) as holder:
+            try:
+                holder.execute("SELECT pg_advisory_xact_lock(hashtext(%s)::bigint)",
+                               (f"oversight-twin:{schema}",))
+                started = threading.Event()
+                finished = threading.Event()
+
+                def cold_start() -> None:
+                    started.set()
+                    PostgresStore(PG, schema=schema).load("Ashgrove Audit LLP")
+                    finished.set()
+
+                worker = threading.Thread(target=cold_start, daemon=True)
+                worker.start()
+                assert started.wait(timeout=10)
+                deadline = time.monotonic() + 15
+                waiting = 0
+                while time.monotonic() < deadline and not finished.is_set():
+                    with psycopg.connect(PG, autocommit=True) as probe:
+                        waiting = probe.execute(
+                            "SELECT count(*) FROM pg_locks "
+                            "WHERE locktype = 'advisory' AND NOT granted").fetchone()[0]
+                    if waiting:
+                        break
+                    time.sleep(0.05)
+                assert waiting > 0, "the cold start did not wait on the advisory lock"
+                assert not finished.is_set()
+                holder.commit()
+                worker.join(timeout=30)
+                assert finished.is_set()
+            finally:
+                holder.rollback()
+    finally:
+        if worker is not None:
+            worker.join(timeout=30)
         _drop(schema)
