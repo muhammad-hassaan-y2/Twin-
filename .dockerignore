@@ -1,26 +1,44 @@
-# The image needs three source trees and nothing else. Keeping the context small keeps
-# builds quick and keeps local scratch files, journals and node_modules out of the image.
-.git
-.gitignore
+# Git and tooling state
+**/.git
+**/.qoder
+**/.commandcode
+**/.zed
+**/.DS_Store
+
+# Dependencies and build output
+**/node_modules
+**/dist
+**/out
+**/.out
+**/*.tsbuildinfo
+**/*.log
+
+# Local environment, secrets and runtime state
+**/.env
+**/.env.*
+**/.secrets
+**/.venv
 **/__pycache__
 **/*.py[cod]
 **/.pytest_cache
-**/*.egg-info
-**/build
-**/dist
-**/node_modules
-**/.venv
-**/venv
+**/.iwsdk
+**/*.db
+**/*.db-wal
+**/*.db-shm
 
-# Not part of the served service.
+# Not needed inside images
+**/specs
+**/examples
+**/references
+Tiltfile
+.tiltignore
+.dockerignore
+
+# Not part of the integration image (Dockerfile, target integration)
 tabletop-twin/chain
-tabletop-twin/web
 swarm-oversight/data
 swarm-oversight/results
 swarm-oversight/report.pdf
 swarm-oversight/tests
-
-**/.env
-**/.env.*
 **/*.journal.jsonl
 **/artifacts

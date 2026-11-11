@@ -1,0 +1,60 @@
+name: twin
+
+include:
+  - ../common/docker-compose.yaml
+
+services:
+  backend:
+    image: twin-backend
+    command: uvicorn twin.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir twin
+    working_dir: /workspace/tabletop-twin/backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: twin-web
+    command: ./node_modules/.bin/iwsdk dev restart --foreground --no-open
+    working_dir: /workspace/tabletop-twin/web
+    ports:
+      - "8081:8081"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      backend:
+        condition: service_started
+
+  integration:
+    image: twin-integration
+    ports:
+      - "8001:8000"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

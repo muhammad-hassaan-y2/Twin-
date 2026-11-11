@@ -173,20 +173,20 @@ obtained at PayPal, which this process does not simulate for the merchant rail.
 
 ## Deployment
 
-The service is one container, built from the repository root because the integration
-imports its two sibling trees:
+The service is one container — the `integration` target of the root Dockerfile, built
+from the repository root because the integration imports its two sibling trees. It
+runs in the shared dev stack alongside the twin backend and web:
 
 ```sh
-docker build -f integration/Dockerfile -t oversight-twin .
+# set OVERSIGHT_API_TOKEN in examples/postgres/.env, e.g.
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
 
-export OVERSIGHT_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-docker compose -f integration/docker-compose.yml up --build     # app + PostgreSQL
+tilt up     # integration API on http://localhost:8001
 ```
 
-Compose has no default token: without `OVERSIGHT_API_TOKEN` it refuses to start rather
-than exposing an unauthenticated book. The stack runs as a non-root user, the container's
-healthcheck reads `/health`, and one worker on purpose - the rate meter, the runs and the
-model client are per process.
+Without `OVERSIGHT_API_TOKEN` the authenticated routes answer 401 rather than exposing
+an unauthenticated book. The stack runs as a non-root user, with one worker on purpose
+- the rate meter, the runs and the model client are per process.
 
 A local PostgreSQL comes with the stack; for a hosted book, point
 `OVERSIGHT_DATABASE_URL` at a Neon branch and the local database is simply unused. The

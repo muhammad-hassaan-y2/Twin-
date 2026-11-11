@@ -1,0 +1,35 @@
+{
+	pki {
+		ca local {
+			root {
+				format pem_file
+				cert /etc/caddy/certs/ca.crt
+				key /etc/caddy/certs/ca.key
+			}
+		}
+	}
+
+	https_port 8443
+}
+
+localhost, web.local {
+	tls {
+		issuer internal {
+			ca local
+		}
+	}
+
+	# The client calls /api/...; FastAPI serves /v1/...
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy web:8081 {
+			transport http {
+				tls
+				tls_insecure_skip_verify
+			}
+		}
+	}
+}

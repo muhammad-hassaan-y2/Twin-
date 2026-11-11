@@ -31,3 +31,15 @@ Each project's own README says what it is and how to run it. Start with
 [integration/README.md](integration/README.md) for the joined system. From `integration`,
 `python -m oversight_twin.showcase` tells the whole story in one command, with every
 figure measured during the run.
+
+## Development
+
+Requires Docker; Tilt is optional.
+
+```sh
+examples/common/certs/generate_ca.sh
+cp examples/postgres/.env.example examples/postgres/.env
+tilt up
+```
+
+Open https://localhost:8443. Without Tilt, run `docker compose up --build` instead.
