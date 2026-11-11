@@ -19,6 +19,59 @@ are not chain records. Keep one hub instance per principal and currency: repeate
 or concurrent calls reuse its payment record, and changed terms under an existing
 ID are refused. Unknown outcomes permit lookup, not another charge.
 
+## CRM-fed audit pipeline
+
+A dataset is a named batch of engagements, each stated in the figures a client's
+file and fee ledger give. The pipeline parses every row strictly - a boolean is
+not an integer, a rate must be finite, required columns cannot be blank - and then
+checks the rows against each other: standard against reduced VAT rate, a client's
+fee against the firm's total, a small-undertaking claim against the facts that
+would support it, a missing jurisdiction, a missing multi-year fee history.
+Errors block the row before any audit; warnings mark it for review and still
+audit it. A blocked row is reported with the codes that blocked it and is never
+priced.
+
+A surviving row is reviewed by all 26 desks. Every binding `clear` or `hold`
+finding on a priced engagement becomes an instruction, but nothing moves until a
+person clears it by name. One aggregate bound applies across the whole principal,
+not per engagement, and a refusal is reported on the instruction rather than
+swallowed. Agreement IDs are dataset-scoped and stable, so replaying the same
+batch neither reprices nor charges twice; new terms under an existing ID are a
+conflict. A zero-fee engagement opens no instruction.
+
+The pipeline can also write its CRM view: one JSON line per engagement with the
+run ID, quality, issue codes, verdict counts and per-instruction state. CRM and
+tool adapters read JSON files (a list, or an object with `records` and an optional
+`dataset_id`) and CSV (one row per engagement, semicolon-separated list cells).
+Provenance is the file's own name, never the local path. A batch whose dataset
+does not match the pipeline's is refused before anything is audited.
+
+## HTTP edge
+
+The pipeline is served with bearer-token authentication and fails closed:
+
+```sh
+export OVERSIGHT_API_TOKEN=...            # required for any authenticated route
+export OVERSIGHT_RAIL=paypal              # or simulated, which is labelled as such
+export OVERSIGHT_PAYEE="Ashgrove Audit LLP"
+export OVERSIGHT_PER_AGENT_LIMIT_CENTS=50000
+export OVERSIGHT_PER_PAYEE_LIMIT_CENTS=60000
+# OVERSIGHT_WINDOW=10 and OVERSIGHT_LONG_WINDOW=60 are optional
+python -m uvicorn oversight_twin.api:app
+```
+
+- `GET /health` is unauthenticated and reports only the rail, recovery model and
+  whether a token and payee are configured; it never echoes the token.
+- `POST /v1/runs` audits a dataset's records and optionally applies named
+  clearances.
+- `GET /v1/runs/{run_id}` returns a run's latest state.
+- `POST /v1/runs/{run_id}/clear` clears named instructions in a run.
+
+Unknown runs are 404, unknown agreements and invalid bodies are 422, and with no
+rail, no payee, no aggregate bound or no token the service answers 503 with the
+missing setting rather than falling back to a simulated rail. The `paypal` rail
+still accepts only sandbox credentials; live capture is refused.
+
 ## EU evidence
 
 The roster has 26 roles: the original 18, three historical VAT comparators, two
@@ -103,3 +156,13 @@ caller's clearance interface, not authentication. The payment journal and order-
 mapping are in memory; crash-safe recovery, distributed locking, durable approval
 storage and an atomic transaction across PayPal and the chain are not claimed.
 Never restart or create a new payment to resolve an unknown outcome.
+
+The pipeline's runs and clearance state are likewise in memory: a restart forgets
+runs, while the PayPal order memory goes with the transport it belongs to. The
+HTTP token authenticates a caller to this process; it does not identify which
+person cleared a payment. The CRM adapters read files - there is no vendor API
+client, webhook receiver, schema registry or retry queue - and outcome lines are
+appended, not reconciled against a CRM record. Quality checks are structural: they
+find contradictions and missing facts, not the correctness of the facts a CRM was
+told.
+
