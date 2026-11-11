@@ -97,6 +97,25 @@ def test_the_payee_bound_needs_the_monitor_and_its_long_window():
                                 LIM.long_window) > LIM.per_payee
 
 
+def test_the_payee_window_is_rolling_not_tumbling():
+    # Two bound-sized payments straddling a fixed (tumbling) bin edge must still
+    # share one rolling window, or an attacker buys 2B at the edge. The lookback
+    # is anchored at each payment, so ticks L-1 and L+1 are 2 ticks apart.
+    L = LIM.long_window
+    amt = LIM.per_payee // 2 + 1          # each under per_agent, pair over per_payee
+    lo, hi = L - 1, L + 1
+    assert lo // L != hi // L             # a tumbling bin would split these
+    straddle = [Action(0, "a", "spend", amt, "vendor", lo),
+                Action(1, "b", "spend", amt, "vendor", hi)]
+    assert any(f.rule in ("split_payment", "slow_split")
+               for _, f in Monitor().review(straddle))
+    # A full window+1 apart is the honest rate limit: two windows, 2B total, no
+    # flag -- the I*B*(floor(T/W)+1) leakage bound, not a tumbling artefact.
+    apart = [Action(0, "a", "spend", amt, "vendor", 0),
+             Action(1, "b", "spend", amt, "vendor", L + 1)]
+    assert Monitor().review(apart) == []
+
+
 def test_recall_overstates_protection():
     outs = [replay(ALL["split_payment"](s), "monitor") for s in SEEDS]
     assert all(o.detected for o in outs)
