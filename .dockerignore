@@ -1,0 +1,35 @@
+# Git and tooling state
+**/.git
+**/.qoder
+**/.commandcode
+**/.zed
+**/.DS_Store
+
+# Dependencies and build output
+**/node_modules
+**/dist
+**/out
+**/.out
+**/*.tsbuildinfo
+**/*.log
+
+# Local environment, secrets and runtime state
+**/.env
+**/.env.*
+**/.secrets
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.iwsdk
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# Not needed inside images
+**/specs
+**/examples
+**/references
+Tiltfile
+.tiltignore
+.dockerignore

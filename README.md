@@ -1,11 +1,12 @@
 # PayPal AI Hackathon — Oversight Twin
 
-**Project combining two modular systems:**
+**Project combining modular systems:**
 1. **`tabletop-twin`**: PayPal Orders v2 execution engine with an explicit
    idempotency-keyed payment state machine (PENDING -> COMPLETED / FAILED / UNKNOWN).
 2. **`swarm-oversight`**: Multi-agent AI safety monitor that intercepts spend
    requests across autonomous agents to prevent threshold-evasion attacks
    (split payments, multi-hop relays, payee alias spoofing).
+3. **`integration`**: Enterprise settlement pipeline, CRM reconciliation, PostgreSQL durable ledger, and Gemini tool calling.
 
 The **`oversight_twin`** wrapper places the multi-agent guard inline in the
 PayPal execution pipeline before `charge()` hits the PayPal Sandbox API.
@@ -108,34 +109,28 @@ graph TD
 
 ## Installation & Running
 
-### 1. Clone / ensure the project structure
+### 1. Project Structure
 
 ```
-L:swarmoversight/
-├─ Twin/
-│  ├─ app/
-│  │  ├─ main.py
-│  │  ├─ oversight_twin.py
-│  │  ├─ paypal_client.py
-│  │  └─ model.py (if needed)
-│  ├─ tests/
-│  │  └─ test_hackathon_submission.py
-│  ├─ Dockerfile
-│  ├─ docker-compose.yml
-│  └─ README.md
-└─ swarm-oversight/           # pre-existing submodule
-   ├─ pyproject.toml
-   ├─ swarm_oversight/
-   │  ├─ __init__.py
-   │  ├─ monitor.py
-   │  ├─ model.py
-   │  ├─ scenarios.py
-   │  └─ harness.py
+Twin/
+├─ app/
+│  ├─ main.py          # FastAPI endpoints
+│  ├─ oversight_twin.py # Guard + Session + MoneyNotMoved
+│  ├─ paypal_client.py # PayPal Orders v2 client
+│  └─ model.py         # Shared dataclasses
+├─ integration/        # Enterprise CRM, settlement & PostgreSQL ledger
+├─ swarm-oversight/    # Multi-agent AI safety monitor & research harness
+├─ tabletop-twin/      # Immersive XR client & backend forecasting twin
+├─ specs/              # System specifications
+├─ tests/              # Test suites
+├─ Dockerfile
+├─ docker-compose.yml
+└─ Tiltfile
 ```
 
 ### 2. Install Python dependencies
 
-From the `Twin/` directory:
+From the repository root:
 
 ```bash
 python -m venv .venv
@@ -143,12 +138,9 @@ source .venv/bin/activate  # .venv\Scripts\activate on Windows
 pip install fastapi uvicorn httpx pytest pytest-requests
 ```
 
-The `swarm-oversight` submodule is already present and its dependencies are
-minimal (standard library only).
-
 ### 3. Environment variables
 
-Create a `.env` file in the `Twin/` directory:
+Create a `.env` file in the root directory:
 
 ```env
 # PayPal Sandbox credentials (required for real API calls)
@@ -219,62 +211,13 @@ runs deterministically without network credentials.
 
 ---
 
-## Docker
+## Full Stack Development with Tilt & Tabletop Twin
 
-The `Dockerfile` (below) installs the app and its dependencies into a minimal
-container. The `docker-compose.yml` above orchestrates the service and provides
-a dummy PayPal mock for local development without credentials.
+Start with `tabletop-twin/README.md` and `tabletop-twin/backend/README.md` for XR and service guarantees.
 
-### Dockerfile
+Requires Docker and Tilt:
 
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Install deps
-COPY Twin/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the app code
-COPY Twin/app/ /app/
-
-# Copy the shared swarm-oversight package
-COPY Twin/swarm-oversight/ /app/swarm-oversight/
-
-# Default env (override at runtime)
-ENV PAYPAL_CLIENT_ID="" \
-    PAYPAL_SECRET=""
-
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Requirements (Twin/requirements.txt)
-
-```
-fastapi
-uvicorn[standard]
-httpx
-pytest
-```
-
----
-
-## Project Structure (Twin/)
-
-```
-Twin/
-├─ app/
-│  ├─ __init__.py
-│  ├─ main.py          # FastAPI endpoints
-│  ├─ oversight_twin.py # Guard + Session + MoneyNotMoved
-│  ├─ paypal_client.py # PayPal Orders v2 client
-│  └─ model.py         # Shared dataclasses (Action, PaymentState)
-├─ tests/
-│  └─ test_hackathon_submission.py
-├─ docker-compose.yml
-├─ Dockerfile
-├─ README.md
-└─ .env.example          # see environment variables section above
+```sh
+examples/common/certs/generate_ca.sh
+tilt up
 ```
