@@ -142,6 +142,11 @@ class PayPalHub:
         self._latest[settlement.agreement] = settlement
         return settlement
 
+    def state_of(self, agreement_id: str) -> str | None:
+        """The payment state already held for an agreement, or None before it was opened."""
+        record = self._payments.get(agreement_id)
+        return record.state.value if record is not None else None
+
     @property
     def settled_cents(self) -> int:
         return sum(s.amount_cents for s in self._latest.values() if s.settled)
