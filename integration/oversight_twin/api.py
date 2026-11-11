@@ -12,14 +12,18 @@ import threading
 from typing import Any, Callable
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from swarm_oversight.monitor import Limits
 from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
 
-from .commerce import BillingBook, Invoice, SimulatedMerchant
+from .commerce import BillingBook, SimulatedMerchant, invoice_from
 from .commerce_tools import CommerceTools, review_records
+from .llm import (Assistant, AssistantUnavailable, GeminiClient, GeminiConfig,
+                  ModelUnavailable)
 from .pipeline import Pipeline
+from .store import MemoryStore, StoreUnavailable, store_from_env
 
 RAILS = {"paypal": "paypal-sandbox", "simulated": "simulated"}
 
@@ -47,6 +51,12 @@ class CaptureIn(BaseModel):
 class ToolIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    approved_by: str | None = Field(default=None, max_length=120)
+    """A person, not the model: without a name the assistant's capture calls are refused."""
 
 
 class SettlementService:
@@ -93,39 +103,49 @@ class SettlementService:
 
 
 class BillingService:
-    """Client invoices for one merchant: priced from the review, opened and captured on PayPal."""
+    """Client invoices for one merchant: priced from the review, opened and captured on PayPal.
+
+    State lives in a store: process memory by default, PostgreSQL when one is configured. The
+    store is read on the first billing operation, not at construction, so wiring the service
+    never touches a database that has not been asked to do anything yet.
+    """
 
     def __init__(self, transport: object, *, merchant: str, rail: str,
-                 currency: str = "USD") -> None:
-        self.book = BillingBook(transport, merchant=merchant, currency=currency)
+                 currency: str = "USD", store: object | None = None,
+                 client: object | None = None) -> None:
+        self._lock = threading.RLock()
+        self._store = store or MemoryStore()
+        self.book = BillingBook(transport, merchant=merchant, currency=currency,
+                                store=self._store)
         self.rail = rail
-        self._engagements: dict[str, dict[str, Any]] = {}
+        self.client = client
+        self.writer = client.writer() if client is not None else None
+        self._engagements: dict[str, dict[str, dict[str, Any]]] = {}
+        self._engagements_loaded = False
 
     def prepare(self, dataset_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-        engagements = review_records(records, dataset_id=dataset_id,
-                                     currency=self.book.currency)
-        self._engagements[dataset_id] = engagements
-        for entry in engagements.values():
-            priced = entry["invoice"]
-            if priced is None:
-                continue
-            self.book.prepare(Invoice(
-                id=priced["id"], engagement_id=priced["engagement_id"],
-                client=priced["client"], amount_cents=priced["amount_cents"],
-                currency=priced["currency"], description=priced["description"],
-                due_in_days=priced["due_in_days"]))
-        priced_count = sum(1 for entry in engagements.values() if entry["invoice"])
-        return {
-            "dataset_id": dataset_id,
-            "rail": self.rail,
-            "engagements": list(engagements.values()),
-            "priced": priced_count,
-            "refused": len(engagements) - priced_count,
-            "book": self.book.summary(),
-        }
+        with self._lock:
+            engagements = review_records(records, dataset_id=dataset_id,
+                                         currency=self.book.currency)
+            self._engagements_now()[dataset_id] = engagements
+            # A new export replaces the old one; rows that disappeared must not linger in state.
+            self._store.clear_engagements(self.book.merchant, dataset_id)
+            for key, entry in engagements.items():
+                self._store.save_engagement(self.book.merchant, dataset_id, key, entry)
+                if entry["invoice"] is not None:
+                    self.book.prepare(invoice_from(entry["invoice"]))
+            priced_count = sum(1 for entry in engagements.values() if entry["invoice"])
+            return {
+                "dataset_id": dataset_id,
+                "rail": self.rail,
+                "engagements": list(engagements.values()),
+                "priced": priced_count,
+                "refused": len(engagements) - priced_count,
+                "book": self.book.summary(),
+            }
 
     def open(self, invoice_id: str) -> dict[str, Any]:
-        return self.book.open_prepared(invoice_id)
+        return self.book.open_prepared(invoice_id, writer=self.writer)
 
     def status(self, invoice_id: str) -> dict[str, Any]:
         return self.book.status(invoice_id)
@@ -139,18 +159,44 @@ class BillingService:
     def summary(self) -> dict[str, Any]:
         return self.book.summary()
 
-    def _engagements_across_datasets(self) -> dict[str, dict[str, Any]]:
-        return {key: entry for engagements in self._engagements.values()
-                for key, entry in engagements.items()}
+    def ask(self, question: str, *, approved_by: str | None = None) -> dict[str, Any]:
+        """Let the configured model act through the billing tools, under the same refusals."""
+        if self.client is None:
+            raise AssistantUnavailable(
+                "no model is configured; set GEMINI_API_KEY in the environment to enable "
+                "the assistant")
+        with self._lock:
+            engagements = self._engagements_now()
+            tools = CommerceTools(self.book, self._engagements_across_datasets(engagements))
+        return Assistant(self.client, tools).ask(question, approved_by=approved_by)
+
+    def _engagements_now(self) -> dict[str, dict[str, dict[str, Any]]]:
+        if not self._engagements_loaded:
+            for row in self._store.load(self.book.merchant).engagements:
+                self._engagements.setdefault(row["dataset_id"], {})[row["engagement_key"]] = \
+                    row["entry"]
+            self._engagements_loaded = True
+        return self._engagements
+
+    @staticmethod
+    def _engagements_across_datasets(engagements: dict[str, dict[str, dict[str, Any]]]
+                                     ) -> dict[str, dict[str, Any]]:
+        return {key: entry for entries in engagements.values() for key, entry in entries.items()}
 
     def tools(self) -> list[dict[str, Any]]:
-        return CommerceTools(self.book, self._engagements_across_datasets()).catalog()
+        with self._lock:
+            engagements = self._engagements_across_datasets(self._engagements_now())
+        return CommerceTools(self.book, engagements).catalog()
 
     def tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return CommerceTools(self.book, self._engagements_across_datasets()).call(name, arguments)
+        with self._lock:
+            engagements = self._engagements_across_datasets(self._engagements_now())
+        return CommerceTools(self.book, engagements).call(name, arguments)
 
     def describe(self) -> dict[str, Any]:
-        return {"rail": self.rail, "merchant": self.book.merchant, "recovery": "in-memory"}
+        return {"rail": self.rail, "merchant": self.book.merchant,
+                "store": self._store.describe(),
+                "model": self.client.model if self.client is not None else None}
 
 
 def limits_from_env() -> tuple[Limits | None, str]:
@@ -210,9 +256,15 @@ def billing_from_env() -> tuple[BillingService | None, str]:
     merchant = os.environ.get("OVERSIGHT_PAYEE", "").strip()
     if not merchant:
         return None, "set OVERSIGHT_PAYEE to the merchant that receives these invoices"
+    store, why = store_from_env()
+    if store is None:
+        return None, why
     if rail == RAILS["simulated"]:
         transport = SimulatedMerchant()
-    return BillingService(transport, merchant=merchant, rail=rail), ""
+    config = GeminiConfig.from_env()
+    client = GeminiClient(config) if config is not None else None
+    return BillingService(transport, merchant=merchant, rail=rail, store=store,
+                          client=client), ""
 
 
 def create_app(*, token: str | None = None, service: SettlementService | None = None,
@@ -245,13 +297,20 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=503, detail=app.state.billing_reason)
         return app.state.billing
 
+    @app.exception_handler(StoreUnavailable)
+    async def store_unavailable(_, error: StoreUnavailable) -> JSONResponse:
+        # A configured database that cannot be used is a refusal, not a quiet return to memory.
+        return JSONResponse(status_code=503, content={"detail": str(error)})
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         service = app.state.service
         if service is None:
             return {"status": "unconfigured", "why": app.state.reason}
+        billing = app.state.billing
         return {"status": "ok", **service.describe(), "token_configured": bool(app.state.token),
-                "billing": "ok" if app.state.billing else "unconfigured"}
+                "billing": billing.describe() if billing is not None else
+                {"status": "unconfigured", "why": app.state.billing_reason}}
 
     @app.post("/v1/runs")
     def run(body: RunIn, _: None = Depends(auth),
@@ -338,6 +397,20 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
     def billing_tool(body: ToolIn, _: None = Depends(auth),
                      billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         return billing.tool(body.name, body.arguments)
+
+    @app.post("/v1/billing/ask")
+    def billing_ask(body: AskIn, _: None = Depends(auth),
+                    billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        try:
+            return billing.ask(body.question, approved_by=body.approved_by)
+        except AssistantUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ModelUnavailable as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="no such invoice") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return app
 

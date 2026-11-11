@@ -25,11 +25,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Any, Callable
 
 from twin.audit.agents import Case, Finding
 from twin.payments.machine import AmbiguousResult, MoneyNotMoved
 from twin.payments.paypal import ProviderNotFound, ProviderResult, to_amount
+
+from .store import MemoryStore, Store
 
 ERROR, WARNING = "error", "warning"
 
@@ -93,6 +96,15 @@ class Invoice:
             "description": self.description, "due_in_days": self.due_in_days,
             "amount": to_amount(self.amount_cents, self.currency),
         }
+
+
+def invoice_from(data: dict[str, Any]) -> Invoice:
+    """Rebuild an invoice from stored JSON. Validation runs again, so bad state cannot slip in."""
+    return Invoice(
+        id=data["id"], engagement_id=data["engagement_id"], client=data["client"],
+        amount_cents=int(data["amount_cents"]), currency=data["currency"],
+        description=str(data.get("description", "")), due_in_days=int(data["due_in_days"]),
+    )
 
 
 def price_engagement(external_id: str, case: Case, findings: list[Finding], *,
@@ -196,16 +208,24 @@ def invoice_line(invoice: Invoice, writer: Writer | None = None) -> tuple[str, s
 
 @dataclass
 class BillingBook:
-    """One merchant's invoices: one PayPal order per invoice, one capture per order."""
+    """One merchant's invoices: one PayPal order per invoice, one capture per order.
+
+    The book is rehydrated from its store on first use, not at construction, so importing or
+    wiring a service never opens a database connection. `MemoryStore` keeps the demo honest
+    about losing its memory; a `PostgresStore` makes a restart read the same book.
+    """
 
     transport: object
     merchant: str
     currency: str = "USD"
     due_in_days: int = 14
+    store: Store | None = None
     _entries: dict[str, dict[str, Any]] = field(init=False, default_factory=dict)
     _invoices: dict[str, Invoice] = field(init=False, default_factory=dict)
     _conflicts: dict[str, dict[str, Any]] = field(init=False, default_factory=dict)
     _prepared: dict[str, Invoice] = field(init=False, default_factory=dict)
+    _loaded: bool = field(init=False, default=False)
+    _lock: object = field(init=False, default_factory=RLock)
 
     def __post_init__(self) -> None:
         if not isinstance(self.merchant, str) or not self.merchant.strip():
@@ -213,26 +233,39 @@ class BillingBook:
         if not re.fullmatch(r"[A-Z]{3}", self.currency):
             raise ValueError("currency must be a three-letter code")
         self.merchant = self.merchant.strip()
+        self.store = self.store or MemoryStore()
 
     def prepare(self, invoice: Invoice) -> dict[str, Any]:
         """Hold a priced invoice without touching the provider. Opening is a separate act."""
-        if invoice.currency != self.currency:
-            raise ValueError("one book keeps one currency for its settlements")
-        self._prepared[invoice.id] = invoice
-        return invoice.as_dict()
+        with self._lock:
+            self._hydrate()
+            if invoice.currency != self.currency:
+                raise ValueError("one book keeps one currency for its settlements")
+            self._prepared[invoice.id] = invoice
+            self.store.save_invoice(self.merchant, invoice.as_dict())
+            return invoice.as_dict()
 
     def prepared(self) -> list[dict[str, Any]]:
-        return [invoice.as_dict() for invoice in self._prepared.values()]
+        with self._lock:
+            self._hydrate()
+            return [invoice.as_dict() for invoice in self._prepared.values()]
 
     def open_prepared(self, invoice_id: str, *, writer: Writer | None = None) -> dict[str, Any]:
         """Open an invoice this book priced. An id it never priced is refused, not guessed."""
-        invoice = self._prepared.get(invoice_id)
-        if invoice is None:
-            raise KeyError(invoice_id)
-        return self.open(invoice, writer=writer)
+        with self._lock:
+            self._hydrate()
+            invoice = self._prepared.get(invoice_id)
+            if invoice is None:
+                raise KeyError(invoice_id)
+            return self.open(invoice, writer=writer)
 
     def open(self, invoice: Invoice, *, writer: Writer | None = None) -> dict[str, Any]:
         """Create the order once for this invoice, and remember it before anything else."""
+        with self._lock:
+            return self._open(invoice, writer)
+
+    def _open(self, invoice: Invoice, writer: Writer | None) -> dict[str, Any]:
+        self._hydrate()
         if invoice.currency != self.currency:
             raise ValueError("one book keeps one currency for its settlements")
         known = self._invoices.get(invoice.id)
@@ -267,8 +300,13 @@ class BillingBook:
 
     def capture(self, invoice_id: str, *, approved_by: str) -> dict[str, Any]:
         """Capture a buyer-approved order, once, on a named person's instruction."""
+        with self._lock:
+            return self._capture(invoice_id, approved_by)
+
+    def _capture(self, invoice_id: str, approved_by: str) -> dict[str, Any]:
         if not isinstance(approved_by, str) or not approved_by.strip():
             raise ValueError("a capture needs the name of the person who approved it")
+        self._hydrate()
         entry = self._entries.get(invoice_id)
         if entry is None:
             raise KeyError(invoice_id)
@@ -284,11 +322,11 @@ class BillingBook:
         if provider not in _PROVIDER_STATES:
             entry["note"] = ("the provider did not report a state this book recognises; reconcile"
                              " from the provider, never by charging again")
-            return dict(entry)
+            return self._persist(entry)
         if provider != "APPROVED":
             entry.update(state=AWAITING_BUYER,
                          note="the buyer has not approved this order yet")
-            return dict(entry)
+            return self._persist(entry)
 
         try:
             result = self.transport.capture_order(entry["order_id"], invoice_id)
@@ -308,16 +346,20 @@ class BillingBook:
                                 approved_by)
         if result.status in (AWAITING_BUYER, AWAITING_CAPTURE, "pending"):
             entry.update(state=AWAITING_CAPTURE, note="the provider has not completed the capture")
-        elif result.status == UNKNOWN:
+            return self._persist(entry)
+        if result.status == UNKNOWN:
             return self._finish(entry, UNKNOWN, None, approved_by,
                                 note="the provider returned an unknown outcome; reconcile")
-        else:
-            return self._finish(entry, FAILED, None, approved_by,
-                                note=f"the provider refused the capture ({result.status})")
-        return dict(entry)
+        return self._finish(entry, FAILED, None, approved_by,
+                            note=f"the provider refused the capture ({result.status})")
 
     def status(self, invoice_id: str) -> dict[str, Any]:
         """Read the provider's view of a known order without moving anything."""
+        with self._lock:
+            return self._read(invoice_id)
+
+    def _read(self, invoice_id: str) -> dict[str, Any]:
+        self._hydrate()
         entry = self._entries.get(invoice_id)
         if entry is None:
             raise KeyError(invoice_id)
@@ -328,38 +370,44 @@ class BillingBook:
         state = _PROVIDER_STATES.get(provider)
         if state is None:
             entry["note"] = "the provider did not report a state this book recognises"
-        elif state != entry["state"]:
+            return self._persist(entry)
+        if state != entry["state"]:
             entry["state"] = state
             if state == CAPTURED:
                 entry["provider_ref"] = read.reference or entry["order_id"]
                 entry["note"] = "captured"
+            return self._persist(entry)
         return dict(entry)
 
     def summary(self) -> dict[str, Any]:
         """What the book says: billed, collected, still owed, and what needs a person."""
-        rows = [dict(entry) for entry in self._entries.values()]
-        captured = [row for row in rows if row["state"] == CAPTURED]
-        billed = sum(row["invoice"]["amount_cents"] for row in rows)
-        collected = sum(row["invoice"]["amount_cents"] for row in captured)
-        return {
-            "merchant": self.merchant,
-            "currency": self.currency,
-            "invoices": len(rows),
-            "billed_cents": billed,
-            "collected_cents": collected,
-            "outstanding_cents": billed - collected,
-            "captured": len(captured),
-            "awaiting_buyer": sum(1 for row in rows if row["state"] == AWAITING_BUYER),
-            "awaiting_capture": sum(1 for row in rows if row["state"] == AWAITING_CAPTURE),
-            "unknown": sum(1 for row in rows if row["state"] == UNKNOWN),
-            "failed": sum(1 for row in rows if row["state"] == FAILED),
-            "conflicts": len(self._conflicts),
-            "clients": sorted({row["invoice"]["client"] for row in rows}),
-        }
+        with self._lock:
+            self._hydrate()
+            rows = [dict(entry) for entry in self._entries.values()]
+            captured = [row for row in rows if row["state"] == CAPTURED]
+            billed = sum(row["invoice"]["amount_cents"] for row in rows)
+            collected = sum(row["invoice"]["amount_cents"] for row in captured)
+            return {
+                "merchant": self.merchant,
+                "currency": self.currency,
+                "invoices": len(rows),
+                "billed_cents": billed,
+                "collected_cents": collected,
+                "outstanding_cents": billed - collected,
+                "captured": len(captured),
+                "awaiting_buyer": sum(1 for row in rows if row["state"] == AWAITING_BUYER),
+                "awaiting_capture": sum(1 for row in rows if row["state"] == AWAITING_CAPTURE),
+                "unknown": sum(1 for row in rows if row["state"] == UNKNOWN),
+                "failed": sum(1 for row in rows if row["state"] == FAILED),
+                "conflicts": len(self._conflicts),
+                "clients": sorted({row["invoice"]["client"] for row in rows}),
+            }
 
     def invoices(self) -> list[dict[str, Any]]:
-        return ([dict(entry) for entry in self._entries.values()]
-                + [dict(entry) for entry in self._conflicts.values()])
+        with self._lock:
+            self._hydrate()
+            return ([dict(entry) for entry in self._entries.values()]
+                    + [dict(entry) for entry in self._conflicts.values()])
 
     def _store(self, invoice: Invoice, line: str, route: str, *, state: str, order_id: str,
                note: str = "", approval_url: str = "") -> dict[str, Any]:
@@ -375,7 +423,7 @@ class BillingBook:
         }
         self._entries[invoice.id] = entry
         self._invoices[invoice.id] = invoice
-        return dict(entry)
+        return self._persist(entry)
 
     def _finish(self, entry: dict[str, Any], state: str, reference: str | None,
                 approved_by: str, *, note: str = "") -> dict[str, Any]:
@@ -383,7 +431,7 @@ class BillingBook:
         entry["provider_ref"] = reference
         entry["captured_by"] = approved_by.strip() if state == CAPTURED else ""
         entry["note"] = note or ("captured" if state == CAPTURED else entry.get("note", ""))
-        return dict(entry)
+        return self._persist(entry)
 
     def _conflict(self, invoice: Invoice, note: str) -> dict[str, Any]:
         entry = {
@@ -397,7 +445,30 @@ class BillingBook:
             "note": note,
         }
         self._conflicts[invoice.id] = entry
+        self.store.save_conflict(self.merchant, entry)
         return dict(entry)
+
+    def _persist(self, entry: dict[str, Any]) -> dict[str, Any]:
+        self.store.save_entry(self.merchant, entry)
+        return dict(entry)
+
+    def _hydrate(self) -> None:
+        """Read the stored book once. Every later call sees what this process wrote."""
+        if self._loaded:
+            return
+        snapshot = self.store.load(self.merchant)
+        for row in snapshot.invoices:
+            self._prepared[row["id"]] = invoice_from(row)
+        for stored in snapshot.entries:
+            invoice_id = stored["invoice"]["id"]
+            self._entries[invoice_id] = stored
+            # The entry carries the client-facing line as its description; the invoice record
+            # keeps the original terms, and a replay must compare against those.
+            self._invoices[invoice_id] = self._prepared.get(invoice_id) \
+                or invoice_from(stored["invoice"])
+        for stored in snapshot.conflicts:
+            self._conflicts[stored["invoice"]["id"]] = stored
+        self._loaded = True
 
 
 def _approval_url(order: dict[str, Any]) -> str:

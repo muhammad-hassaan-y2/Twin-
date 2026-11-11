@@ -54,3 +54,18 @@ def paypal():
         yield fake
     finally:
         fake.stop()
+
+
+@pytest.fixture
+def gemini():
+    """The localhost HTTP fake the real Gemini client talks to, started for one test."""
+    path = Path(__file__).resolve().parent / "fake_gemini.py"
+    spec = importlib.util.spec_from_file_location("fake_gemini_pipeline", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    fake = module.FakeGemini()
+    fake.start()
+    try:
+        yield fake
+    finally:
+        fake.stop()
