@@ -29,9 +29,18 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def reset_session_and_paypal():
     """Ensure a fresh session and paypal client per test."""
-    # Reset module-level state
+    # Reset module-level state and provide a safe mock PayPal client
     from app import main as main_mod
-    main_mod._paypal_client = None
+    import app.paypal_client as pc_mod
+    mock_paypal = pc_mod.PayPalClient('test-client-id', 'test-secret')
+    async def _mock_create(amount_cents: int, payee_id: str):
+        return {
+            'id': 'ORDER-MOCK-12345',
+            'status': 'COMPLETED',
+            'purchase_units': [{'amount': {'value': f'{amount_cents / 100:.2f}'}}],
+        }
+    mock_paypal.create_order = _mock_create
+    main_mod._paypal_client = mock_paypal
     main_mod._session = None
 
     # Set dummy PayPal sandbox credentials so the client can be instantiated.

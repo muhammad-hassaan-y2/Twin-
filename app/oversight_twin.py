@@ -15,6 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple, Any
 
+import sys
+from pathlib import Path
+_SWARM_DIR = Path(__file__).resolve().parent.parent / 'swarm-oversight'
+if _SWARM_DIR.is_dir() and str(_SWARM_DIR) not in sys.path:
+    sys.path.insert(0, str(_SWARM_DIR))
+
 from swarm_oversight.model import Action as BaseAction, Flag
 from swarm_oversight.monitor import Monitor, Limits
 
