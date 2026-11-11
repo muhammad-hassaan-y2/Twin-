@@ -89,7 +89,8 @@ _ARGUMENTS = {
 def review_records(records: list[dict[str, Any]], *, dataset_id: str,
                    priors: Priors | None = None, firm: Firm | None = None,
                    currency: str = "USD",
-                   due_in_days: int = 14) -> dict[str, dict[str, Any]]:
+                   due_in_days: int = 14,
+                   max_fee_cents: int | None = None) -> dict[str, dict[str, Any]]:
     """Parse, check and review each row, and price it when the firm has something to sell."""
     priors = priors or Priors.load()
     firm = firm or Firm(priors)
@@ -124,7 +125,8 @@ def review_records(records: list[dict[str, Any]], *, dataset_id: str,
                              for verdict in ("clear", "hold", "breach", "silent")}
         invoice, invoice_issues = price_engagement(external_id, case, findings,
                                                    dataset_id=dataset_id, currency=currency,
-                                                   due_in_days=due_in_days)
+                                                   due_in_days=due_in_days,
+                                                   max_fee_cents=max_fee_cents)
         entry["issues"] = [issue.as_dict() for issue in issues + invoice_issues]
         entry["quality"] = ("review" if any(issue.severity == WARNING
                                             for issue in issues + invoice_issues) else "verified")
@@ -134,11 +136,18 @@ def review_records(records: list[dict[str, Any]], *, dataset_id: str,
 
 
 class CommerceTools:
-    """A dispatcher over one book, for an assistant that must not be trusted with figures."""
+    """A dispatcher over one book, for an assistant that must not be trusted with figures.
 
-    def __init__(self, book: BillingBook, engagements: dict[str, dict[str, Any]]) -> None:
+    `actor` and `request_id` are written into the invoice ledger, so a payment the model
+    asked for is attributed to the operator whose request asked the model.
+    """
+
+    def __init__(self, book: BillingBook, engagements: dict[str, dict[str, Any]], *,
+                 actor: str = "", request_id: str = "") -> None:
         self.book = book
         self.engagements = engagements
+        self.actor = actor
+        self.request_id = request_id
 
     def catalog(self) -> list[dict[str, Any]]:
         return [dict(tool) for tool in TOOLS]
@@ -184,12 +193,13 @@ class CommerceTools:
 
     def _open(self, arguments: dict[str, Any]) -> dict[str, Any]:
         invoice_id = str(arguments.get("invoice_id", "")).strip()
-        entry = self.book.open_prepared(invoice_id)
+        entry = self.book.open_prepared(invoice_id, actor=self.actor, request_id=self.request_id)
         return {"ok": True, "result": entry}
 
     def _status(self, arguments: dict[str, Any]) -> dict[str, Any]:
         invoice_id = str(arguments.get("invoice_id", "")).strip()
-        return {"ok": True, "result": self.book.status(invoice_id)}
+        return {"ok": True, "result": self.book.status(invoice_id, actor=self.actor,
+                                                       request_id=self.request_id)}
 
     def _capture(self, arguments: dict[str, Any]) -> dict[str, Any]:
         approved_by = str(arguments.get("approved_by", "")).strip()
@@ -198,7 +208,9 @@ class CommerceTools:
                     "refused": ("a named person must approve the capture; an assistant cannot "
                                 "approve its own spending")}
         invoice_id = str(arguments.get("invoice_id", "")).strip()
-        return {"ok": True, "result": self.book.capture(invoice_id, approved_by=approved_by)}
+        return {"ok": True, "result": self.book.capture(invoice_id, approved_by=approved_by,
+                                                        actor=self.actor,
+                                                        request_id=self.request_id)}
 
     def _summary(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "result": self.book.summary()}

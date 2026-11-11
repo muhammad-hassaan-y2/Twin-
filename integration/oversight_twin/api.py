@@ -3,22 +3,29 @@
 It fails closed. With no token, no named payment destination, no rail or no aggregate bound the
 routes answer 503 and health says which setting is missing; a run never falls back to a fake rail
 without being labelled one.
+
+Every request carries an id, every mutation is attributed to an operator, and a body larger than
+the configured cap or a caller past its rate is refused before it reaches the book.
 """
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import threading
+import time
+from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from swarm_oversight.monitor import Limits
 from twin.payments.paypal import PayPalConfig, PayPalTransport, SandboxTransport
 
-from .commerce import BillingBook, SimulatedMerchant, invoice_from
+from .commerce import BillingBook, InvoiceConflict, SimulatedMerchant, invoice_from
 from .commerce_tools import CommerceTools, review_records
 from .llm import (Assistant, AssistantUnavailable, GeminiClient, GeminiConfig,
                   ModelUnavailable)
@@ -26,6 +33,8 @@ from .pipeline import Pipeline
 from .store import MemoryStore, StoreUnavailable, store_from_env
 
 RAILS = {"paypal": "paypal-sandbox", "simulated": "simulated"}
+DEFAULT_MAX_BODY_BYTES = 1_500_000
+DEFAULT_RATE_LIMIT_PER_MIN = 120
 
 
 class RunIn(BaseModel):
@@ -45,7 +54,8 @@ class BillingIn(BaseModel):
 
 
 class CaptureIn(BaseModel):
-    approved_by: str = Field(min_length=1, max_length=120)
+    approved_by: str | None = Field(default=None, max_length=120)
+    """Omit to sign as the authenticated operator. A different name is refused."""
 
 
 class ToolIn(BaseModel):
@@ -57,6 +67,8 @@ class AskIn(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     approved_by: str | None = Field(default=None, max_length=120)
     """A person, not the model: without a name the assistant's capture calls are refused."""
+    approved_invoices: list[str] = Field(default_factory=list, max_length=50)
+    """The invoices the operator has cleared this question to capture. Empty means none."""
 
 
 class SettlementService:
@@ -112,11 +124,12 @@ class BillingService:
 
     def __init__(self, transport: object, *, merchant: str, rail: str,
                  currency: str = "USD", store: object | None = None,
-                 client: object | None = None) -> None:
+                 client: object | None = None,
+                 max_invoice_cents: int | None = None) -> None:
         self._lock = threading.RLock()
         self._store = store or MemoryStore()
         self.book = BillingBook(transport, merchant=merchant, currency=currency,
-                                store=self._store)
+                                store=self._store, max_invoice_cents=max_invoice_cents)
         self.rail = rail
         self.client = client
         self.writer = client.writer() if client is not None else None
@@ -126,14 +139,23 @@ class BillingService:
     def prepare(self, dataset_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
         with self._lock:
             engagements = review_records(records, dataset_id=dataset_id,
-                                         currency=self.book.currency)
+                                         currency=self.book.currency,
+                                         max_fee_cents=self.book.max_invoice_cents)
             self._engagements_now()[dataset_id] = engagements
-            # A new export replaces the old one; rows that disappeared must not linger in state.
-            self._store.clear_engagements(self.book.merchant, dataset_id)
+            # One transaction: a new export replaces the old one atomically, so rows that
+            # disappeared cannot linger and a half-applied export is impossible.
+            self._store.replace_engagements(self.book.merchant, dataset_id, engagements)
             for key, entry in engagements.items():
-                self._store.save_engagement(self.book.merchant, dataset_id, key, entry)
-                if entry["invoice"] is not None:
+                if entry["invoice"] is None:
+                    continue
+                try:
                     self.book.prepare(invoice_from(entry["invoice"]))
+                except InvoiceConflict as conflict:
+                    entry["quality"] = "blocked"
+                    entry["invoice"] = None
+                    entry["issues"].append({"code": "invoice_conflict",
+                                            "field": "invoice", "severity": "error",
+                                            "message": str(conflict)})
             priced_count = sum(1 for entry in engagements.values() if entry["invoice"])
             return {
                 "dataset_id": dataset_id,
@@ -144,14 +166,22 @@ class BillingService:
                 "book": self.book.summary(),
             }
 
-    def open(self, invoice_id: str) -> dict[str, Any]:
-        return self.book.open_prepared(invoice_id, writer=self.writer)
+    def open(self, invoice_id: str, *, actor: str = "",
+             request_id: str = "") -> dict[str, Any]:
+        return self.book.open_prepared(invoice_id, writer=self.writer,
+                                       actor=actor, request_id=request_id)
 
-    def status(self, invoice_id: str) -> dict[str, Any]:
-        return self.book.status(invoice_id)
+    def status(self, invoice_id: str, *, actor: str = "",
+               request_id: str = "") -> dict[str, Any]:
+        return self.book.status(invoice_id, actor=actor, request_id=request_id)
 
-    def capture(self, invoice_id: str, approved_by: str) -> dict[str, Any]:
-        return self.book.capture(invoice_id, approved_by=approved_by)
+    def capture(self, invoice_id: str, approved_by: str, *, actor: str = "",
+                request_id: str = "") -> dict[str, Any]:
+        return self.book.capture(invoice_id, approved_by=approved_by,
+                                 actor=actor, request_id=request_id)
+
+    def events(self, invoice_id: str | None = None) -> dict[str, Any]:
+        return {"invoice_id": invoice_id, "events": self.book.events(invoice_id)}
 
     def invoices(self) -> dict[str, Any]:
         return {"invoices": self.book.invoices(), "book": self.book.summary()}
@@ -159,16 +189,23 @@ class BillingService:
     def summary(self) -> dict[str, Any]:
         return self.book.summary()
 
-    def ask(self, question: str, *, approved_by: str | None = None) -> dict[str, Any]:
-        """Let the configured model act through the billing tools, under the same refusals."""
+    def ask(self, question: str, *, approved_by: str | None = None,
+            approved_invoices: list[str] | None = None,
+            actor: str = "", request_id: str = "") -> dict[str, Any]:
+        """Let the configured model act through the billing tools, under the same refusals.
+
+        The service lock covers building the tool surface and nothing else: holding it across
+        up to six model calls would serialize every other request behind one slow model.
+        """
         if self.client is None:
             raise AssistantUnavailable(
                 "no model is configured; set GEMINI_API_KEY in the environment to enable "
                 "the assistant")
         with self._lock:
-            engagements = self._engagements_now()
-            tools = CommerceTools(self.book, self._engagements_across_datasets(engagements))
-        return Assistant(self.client, tools).ask(question, approved_by=approved_by)
+            engagements = self._engagements_across_datasets(self._engagements_now())
+            tools = CommerceTools(self.book, engagements, actor=actor, request_id=request_id)
+        return Assistant(self.client, tools, approved_invoices=approved_invoices or (),
+                         request_id=request_id).ask(question, approved_by=approved_by)
 
     def _engagements_now(self) -> dict[str, dict[str, dict[str, Any]]]:
         if not self._engagements_loaded:
@@ -196,7 +233,76 @@ class BillingService:
     def describe(self) -> dict[str, Any]:
         return {"rail": self.rail, "merchant": self.book.merchant,
                 "store": self._store.describe(),
+                "max_invoice_cents": self.book.max_invoice_cents,
                 "model": self.client.model if self.client is not None else None}
+
+
+class RateMeter:
+    """A per-operator sliding window, in this process. One worker's view; health says so."""
+
+    def __init__(self, per_minute: int) -> None:
+        self.per_minute = per_minute
+        self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, who: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            hits = [at for at in self._hits.get(who, []) if at > now - 60.0]
+            if len(hits) >= self.per_minute:
+                self._hits[who] = hits
+                return False
+            hits.append(now)
+            self._hits[who] = hits
+            return True
+
+
+def _positive(env: str, default: int) -> int:
+    raw = os.environ.get(env, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(f"{env} must be a whole number") from error
+    if value <= 0:
+        raise ValueError(f"{env} must be positive")
+    return value
+
+
+def edge_from_env() -> tuple[int, int]:
+    """(requests per operator per minute, largest accepted body) for the module-level app.
+
+    A value that is not a positive whole number stops the process instead of quietly
+    falling back to a default: an operator who wrote 0 asked for something this edge
+    does not do, and guessing in their favour would hide the mistake.
+    """
+    try:
+        return (_positive("OVERSIGHT_RATE_LIMIT_PER_MIN", DEFAULT_RATE_LIMIT_PER_MIN),
+                _positive("OVERSIGHT_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES))
+    except ValueError as error:
+        raise RuntimeError(f"the edge's limits are unusable: {error}") from error
+
+
+def operators_from_env() -> tuple[dict[str, str] | None, bool, str]:
+    """(token -> operator, whether names are enforced, why it cannot be used)."""
+    raw = os.environ.get("OVERSIGHT_API_TOKENS", "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            return None, False, "OVERSIGHT_API_TOKENS must be a JSON object of token -> name"
+        if not isinstance(parsed, dict) or not parsed:
+            return None, False, "OVERSIGHT_API_TOKENS must be a non-empty JSON object"
+        tokens = {str(token): str(name).strip() for token, name in parsed.items()}
+        if any(not token or not name for token, name in tokens.items()):
+            return None, False, "every operator token needs a token and a name"
+        return tokens, True, ""
+    single = os.environ.get("OVERSIGHT_API_TOKEN", "").strip()
+    if not single:
+        return {}, False, ""
+    name = os.environ.get("OVERSIGHT_OPERATOR", "").strip() or "operator"
+    return {single: name}, False, ""
 
 
 def limits_from_env() -> tuple[Limits | None, str]:
@@ -259,33 +365,57 @@ def billing_from_env() -> tuple[BillingService | None, str]:
     store, why = store_from_env()
     if store is None:
         return None, why
+    try:
+        ceiling = _positive("OVERSIGHT_MAX_INVOICE_CENTS", 0) or None
+    except ValueError as error:
+        return None, str(error)
     if rail == RAILS["simulated"]:
         transport = SimulatedMerchant()
     config = GeminiConfig.from_env()
     client = GeminiClient(config) if config is not None else None
     return BillingService(transport, merchant=merchant, rail=rail, store=store,
-                          client=client), ""
+                          client=client, max_invoice_cents=ceiling), ""
 
 
-def create_app(*, token: str | None = None, service: SettlementService | None = None,
-               reason: str = "", billing: BillingService | None = None,
-               billing_reason: str = "") -> FastAPI:
-    app = FastAPI(title="Oversight Twin Pipeline", version="0.2.0")
-    app.state.token = token if token is not None else os.environ.get("OVERSIGHT_API_TOKEN", "")
+def create_app(*, token: str | None = None, tokens: dict[str, str] | None = None,
+               service: SettlementService | None = None, reason: str = "",
+               billing: BillingService | None = None, billing_reason: str = "",
+               rate_limit_per_min: int | None = None,
+               max_body_bytes: int | None = None) -> FastAPI:
+    app = FastAPI(title="Oversight Twin Pipeline", version="0.3.0")
+    if tokens is not None:
+        app.state.tokens, app.state.identities = dict(tokens), True
+    elif token is not None:
+        app.state.tokens, app.state.identities = ({token: "operator"} if token else {}), False
+    else:
+        configured, identities, why = operators_from_env()
+        app.state.tokens, app.state.identities = configured or {}, identities
+        app.state.operators_reason = why
+    app.state.token = next(iter(app.state.tokens), "")
     app.state.service = service
     app.state.reason = reason or ("the pipeline service is not configured"
                                   if service is None else "")
     app.state.billing = billing
     app.state.billing_reason = billing_reason or ("billing is not configured"
                                                   if billing is None else "")
+    app.state.meter = RateMeter(rate_limit_per_min or DEFAULT_RATE_LIMIT_PER_MIN)
+    app.state.max_body_bytes = max_body_bytes or DEFAULT_MAX_BODY_BYTES
 
-    def auth(authorization: str = Header(default="")) -> None:
-        expected = app.state.token
-        if not expected:
+    def auth(request: Request, authorization: str = Header(default="")) -> str:
+        tokens_now = app.state.tokens
+        if not tokens_now:
             raise HTTPException(status_code=401, detail="no API token is configured")
         scheme, _, value = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not secrets.compare_digest(value, expected):
+        if scheme.lower() != "bearer" or not value:
             raise HTTPException(status_code=401, detail="a valid bearer token is required")
+        for candidate, name in tokens_now.items():
+            if secrets.compare_digest(value, candidate):
+                if not app.state.meter.allow(name):
+                    raise HTTPException(status_code=429,
+                                        detail="too many requests from this operator")
+                request.state.operator = name
+                return name
+        raise HTTPException(status_code=401, detail="a valid bearer token is required")
 
     def require() -> SettlementService:
         if app.state.service is None:
@@ -297,23 +427,61 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=503, detail=app.state.billing_reason)
         return app.state.billing
 
+    @app.middleware("http")
+    async def request_guards(request: Request, call_next):
+        request_id = (request.headers.get("x-request-id") or "").strip()[:64] or uuid4().hex
+        request.state.request_id = request_id
+        length = request.headers.get("content-length", "")
+        if length.isdigit() and int(length) > app.state.max_body_bytes:
+            return JSONResponse(status_code=413,
+                                content={"detail": "the request body is too large",
+                                         "request_id": request_id},
+                                headers={"X-Request-ID": request_id})
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+    def request_id_of(request: Request) -> str:
+        return getattr(request.state, "request_id", "")
+
     @app.exception_handler(StoreUnavailable)
     async def store_unavailable(_, error: StoreUnavailable) -> JSONResponse:
         # A configured database that cannot be used is a refusal, not a quiet return to memory.
         return JSONResponse(status_code=503, content={"detail": str(error)})
 
+    @app.get("/", response_class=HTMLResponse)
+    def index() -> str:
+        return _demo_page()
+
+    @app.get("/demo", response_class=HTMLResponse)
+    def demo() -> str:
+        return _demo_page()
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         service = app.state.service
-        if service is None:
-            return {"status": "unconfigured", "why": app.state.reason}
         billing = app.state.billing
-        return {"status": "ok", **service.describe(), "token_configured": bool(app.state.token),
-                "billing": billing.describe() if billing is not None else
-                {"status": "unconfigured", "why": app.state.billing_reason}}
+        if service is None and billing is None:
+            return {"status": "unconfigured", "why": app.state.reason}
+        body: dict[str, Any] = {
+            "status": "ok",
+            "token_configured": bool(app.state.tokens),
+            "operators": len(app.state.tokens),
+            "attribution": "per-operator" if app.state.identities else "shared-token",
+            "rate_limit_per_min": app.state.meter.per_minute,
+            "max_body_bytes": app.state.max_body_bytes,
+        }
+        if service is not None:
+            body.update(service.describe())
+        else:
+            body["rail"] = billing.rail
+            body["runs"] = {"status": "unconfigured", "why": app.state.reason}
+        body["billing"] = billing.describe() if billing is not None else \
+            {"status": "unconfigured", "why": app.state.billing_reason}
+        return body
 
     @app.post("/v1/runs")
-    def run(body: RunIn, _: None = Depends(auth),
+    def run(body: RunIn, _: str = Depends(auth),
             service: SettlementService = Depends(require)) -> dict[str, Any]:
         try:
             return service.run(body.dataset_id, body.currency, body.records, body.clearance)
@@ -321,7 +489,7 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/v1/runs/{run_id}")
-    def get_run(run_id: str, _: None = Depends(auth),
+    def get_run(run_id: str, _: str = Depends(auth),
                 service: SettlementService = Depends(require)) -> dict[str, Any]:
         try:
             return service.get(run_id)
@@ -329,7 +497,7 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=404, detail="no such run") from exc
 
     @app.post("/v1/runs/{run_id}/clear")
-    def clear(run_id: str, body: ClearIn, _: None = Depends(auth),
+    def clear(run_id: str, body: ClearIn, _: str = Depends(auth),
               service: SettlementService = Depends(require)) -> dict[str, Any]:
         try:
             return service.clear(run_id, body.agreements)
@@ -341,7 +509,7 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
     # ----------------------------------------------------------------- billing
 
     @app.post("/v1/billing/prepare")
-    def billing_prepare(body: BillingIn, _: None = Depends(auth),
+    def billing_prepare(body: BillingIn, _: str = Depends(auth),
                         billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         try:
             return billing.prepare(body.dataset_id, body.records)
@@ -349,60 +517,87 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/v1/billing/invoices")
-    def billing_invoices(_: None = Depends(auth),
+    def billing_invoices(_: str = Depends(auth),
                          billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         return billing.invoices()
 
     @app.get("/v1/billing/invoices/{invoice_id}")
-    def billing_status(invoice_id: str, _: None = Depends(auth),
+    def billing_status(invoice_id: str, request: Request, caller: str = Depends(auth),
                        billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         try:
-            return billing.status(invoice_id)
+            return billing.status(invoice_id, actor=caller,
+                                  request_id=request_id_of(request))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="no such invoice") from exc
 
     @app.post("/v1/billing/invoices/{invoice_id}/open")
-    def billing_open(invoice_id: str, _: None = Depends(auth),
+    def billing_open(invoice_id: str, request: Request, caller: str = Depends(auth),
                      billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         try:
-            return billing.open(invoice_id)
+            return billing.open(invoice_id, actor=caller, request_id=request_id_of(request))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="no such priced invoice") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/v1/billing/invoices/{invoice_id}/capture")
-    def billing_capture(invoice_id: str, body: CaptureIn, _: None = Depends(auth),
+    def billing_capture(invoice_id: str, body: CaptureIn, request: Request,
+                        caller: str = Depends(auth),
                         billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        approved_by = (body.approved_by or "").strip()
+        if not approved_by:
+            if not app.state.identities:
+                # One shared token names nobody, so the caller must say who approved the money.
+                raise HTTPException(
+                    status_code=422,
+                    detail="a capture needs the name of the person who approved it")
+            approved_by = caller
+        if app.state.identities and approved_by != caller:
+            raise HTTPException(
+                status_code=403,
+                detail="a capture must be approved by the operator making the request")
         try:
-            return billing.capture(invoice_id, body.approved_by)
+            return billing.capture(invoice_id, approved_by, actor=caller,
+                                   request_id=request_id_of(request))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="no such invoice") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @app.get("/v1/billing/invoices/{invoice_id}/events")
+    def billing_events(invoice_id: str, _: str = Depends(auth),
+                       billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        return billing.events(invoice_id)
+
     @app.get("/v1/billing/summary")
-    def billing_summary(_: None = Depends(auth),
+    def billing_summary(_: str = Depends(auth),
                         billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         return billing.summary()
 
     # ------------------------------------------------- the assistant's tool surface
 
     @app.get("/v1/billing/tools")
-    def billing_tools(_: None = Depends(auth),
+    def billing_tools(_: str = Depends(auth),
                       billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         return {"tools": billing.tools()}
 
     @app.post("/v1/billing/tool")
-    def billing_tool(body: ToolIn, _: None = Depends(auth),
+    def billing_tool(body: ToolIn, _: str = Depends(auth),
                      billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
         return billing.tool(body.name, body.arguments)
 
     @app.post("/v1/billing/ask")
-    def billing_ask(body: AskIn, _: None = Depends(auth),
+    def billing_ask(body: AskIn, request: Request, caller: str = Depends(auth),
                     billing: BillingService = Depends(require_billing)) -> dict[str, Any]:
+        approved_by = (body.approved_by or "").strip()
+        if app.state.identities and approved_by and approved_by != caller:
+            raise HTTPException(
+                status_code=403,
+                detail="an operator cannot approve a capture as somebody else")
         try:
-            return billing.ask(body.question, approved_by=body.approved_by)
+            return billing.ask(body.question, approved_by=approved_by or None,
+                               approved_invoices=body.approved_invoices,
+                               actor=caller, request_id=request_id_of(request))
         except AssistantUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ModelUnavailable as exc:
@@ -415,7 +610,19 @@ def create_app(*, token: str | None = None, service: SettlementService | None = 
     return app
 
 
+def _demo_page() -> str:
+    """The one-page showcase. No token, no key: they are typed in by the reader."""
+    page = Path(__file__).with_name("demo.html")
+    try:
+        return page.read_text(encoding="utf-8")
+    except OSError:
+        return ("<h1>Oversight Twin</h1><p>The demo page is not installed with this package; "
+                "the JSON API is at <code>/docs</code>.</p>")
+
+
 _service_from_env, _why = service_from_env()
 _billing_from_env, _billing_why = billing_from_env()
+_rate_limit, _max_body = edge_from_env()
 app = create_app(service=_service_from_env, reason=_why,
-                 billing=_billing_from_env, billing_reason=_billing_why)
+                 billing=_billing_from_env, billing_reason=_billing_why,
+                 rate_limit_per_min=_rate_limit, max_body_bytes=_max_body)

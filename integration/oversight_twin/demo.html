@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oversight Twin — billing that cannot be talked into paying twice</title>
+<style>
+  :root {
+    --ink: #12161c; --muted: #5c6672; --line: #dfe3e8; --paper: #ffffff;
+    --wash: #f5f7f9; --accent: #1c4f8b; --good: #1d6b48; --warn: #8a5a00; --bad: #96231f;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--wash); color: var(--ink);
+    font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  header { background: var(--paper); border-bottom: 1px solid var(--line); }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; }
+  .bar { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 22px 0 18px; }
+  h1 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13.5px; }
+  main { padding: 24px 0 64px; display: grid; gap: 18px; }
+  section {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px;
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  label { font-size: 13px; color: var(--muted); }
+  input, select, textarea, button {
+    font: inherit; border-radius: 7px; border: 1px solid var(--line);
+    padding: 8px 11px; background: var(--paper); color: var(--ink);
+  }
+  input[type=password], input[type=text] { min-width: 260px; font-family: var(--mono); font-size: 13px; }
+  textarea { width: 100%; min-height: 64px; resize: vertical; }
+  button { cursor: pointer; background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.ghost { background: var(--paper); color: var(--ink); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.small { padding: 4px 9px; font-size: 12.5px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12.5px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line);
+           vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px;
+          border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.captured { color: var(--good); border-color: #b9d9c8; background: #f1f8f4; }
+  .pill.awaiting_capture { color: var(--accent); border-color: #bcd0e6; background: #f2f6fb; }
+  .pill.unknown, .pill.conflict { color: var(--warn); border-color: #e3d3ad; background: #fbf6ea; }
+  .pill.failed { color: var(--bad); border-color: #e6c3c1; background: #fbf2f1; }
+  pre { background: #0f141a; color: #cfd8e3; border-radius: 8px; padding: 14px; overflow: auto;
+        font-family: var(--mono); font-size: 12px; line-height: 1.5; max-height: 320px; margin: 0; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+  .error { color: var(--bad); font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  @media (max-width: 820px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <h1>Oversight Twin</h1>
+    <span class="sub">Client billing for an audited engagement: priced by the firm, approved by a
+      person, settled once.</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>1 · Operator</h2>
+    <div class="row">
+      <input id="token" type="password" placeholder="operator bearer token" autocomplete="off">
+      <button id="connect">Connect</button>
+      <span id="health" class="pill">not connected</span>
+    </div>
+    <p class="hint">The token stays in this page and is sent only as an <code>Authorization</code>
+      header. It is never stored in the page or in a cookie.</p>
+  </section>
+
+  <section>
+    <h2>2 · The book</h2>
+    <div class="stats" id="stats">
+      <div class="stat"><b id="s-billed">—</b><span>billed</span></div>
+      <div class="stat"><b id="s-collected">—</b><span>collected</span></div>
+      <div class="stat"><b id="s-outstanding">—</b><span>outstanding</span></div>
+      <div class="stat"><b id="s-needs">—</b><span>need a person</span></div>
+    </div>
+    <div class="hint" id="book-note">Prices come from the firm's review. A model may reword the
+      client-facing line but cannot add a figure.</div>
+    <div class="row" style="margin-top:12px">
+      <button id="price-sample" class="small">Price the sample engagement</button>
+      <span class="muted" style="font-size:13px">26 desks review one engagement and price it
+        from its own fee.</span>
+    </div>
+    <table style="margin-top:14px">
+      <thead><tr><th>Invoice</th><th>Client</th><th class="num">Amount</th><th>State</th>
+        <th>Order</th><th></th></tr></thead>
+      <tbody id="invoices"><tr><td colspan="6" class="muted">Connect to read the book.</td></tr></tbody>
+    </table>
+  </section>
+
+  <div class="grid2">
+    <section>
+      <h2>3 · Ask the assistant</h2>
+      <textarea id="question" placeholder="What is outstanding? Open the Acme invoice."></textarea>
+      <div class="row" style="margin-top:10px">
+        <input id="approved-by" type="text" placeholder="your name (needed to capture)"
+               style="min-width:200px">
+        <input id="cleared" type="text" placeholder="invoices you clear for capture, comma separated"
+               style="min-width:320px">
+        <button id="ask">Ask</button>
+      </div>
+      <p class="hint">The model may read and price. It cannot supply an amount, and it can only
+        capture an invoice you name here, as you. Every step it tried is shown below.</p>
+      <pre id="answer" style="margin-top:12px">No question asked yet.</pre>
+    </section>
+
+    <section>
+      <h2>4 · Ledger</h2>
+      <p class="hint" style="margin-top:0">The ledger is append-only: who opened the order, who
+        tried to capture it, and what the provider said. Select an invoice in the table.</p>
+      <pre id="events">No invoice selected.</pre>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = { token: "", invoice: "", identities: false, priced: [] };
+  const SAMPLE = {
+    external_id: "A1", client: "Acme GmbH", audit_fee_cents: 20000,
+    non_audit_fee_cents: 1000, is_pie: true, years_auditing: 3, partner_years: 2,
+    tender_held: true, firm_fee_from_client_cents: 1000, firm_total_fees_cents: 100000,
+    kyc_checked_years_ago: 1, non_audit_services: ["tax"], client_geo: "DE",
+    standard_vat_rate_percent: 19.0, reduced_vat_rate_percent: 7.0,
+    supply_in_reduced_category: false,
+  };
+  const money = (cents, currency) =>
+    (cents / 100).toLocaleString(undefined, { style: "currency", currency: currency || "USD" });
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        "Authorization": `Bearer ${state.token}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+    const text = await response.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    if (!response.ok) {
+      const detail = body && body.detail ? JSON.stringify(body.detail) : response.statusText;
+      throw new Error(`${response.status}: ${detail}`);
+    }
+    return body;
+  }
+
+  function say(message) {
+    $("book-note").textContent = message;
+  }
+
+  async function refresh() {
+    const health = await api("/health");
+    state.identities = health.attribution === "per-operator";
+    $("health").textContent = `${health.billing.rail} · ${
+      health.billing.store.durable ? "durable " + health.billing.store.kind : "in-memory"} · ${
+      health.attribution} · model ${health.billing.model ? "on" : "off"}`;
+    $("health").className = "pill " + (health.billing.store.durable ? "captured" : "");
+    $("approved-by").placeholder = state.identities
+      ? "captures sign as you" : "your name (needed to capture)";
+
+    const book = await api("/v1/billing/summary");
+    const currency = book.currency;
+    $("s-billed").textContent = money(book.billed_cents, currency);
+    $("s-collected").textContent = money(book.collected_cents, currency);
+    $("s-outstanding").textContent = money(book.outstanding_cents, currency);
+    $("s-needs").textContent = String(book.unknown + book.conflicts + book.failed);
+
+    const listing = await api("/v1/billing/invoices");
+    render(listing.invoices, currency);
+  }
+
+  function render(rows, currency) {
+    const body = $("invoices");
+    const listed = new Set(rows.map((row) => row.invoice.id));
+    state.priced = state.priced.filter((invoice) => !listed.has(invoice.id));
+    const shown = rows.concat(state.priced.map((invoice) => ({
+      invoice, line_route: "rules", order_id: "", approval_url: "", state: "priced",
+      provider_ref: null, captured_by: "",
+      note: "priced from the review; opening it creates the order",
+    })));
+    if (!shown.length) {
+      body.innerHTML = `<tr><td colspan="6" class="muted">Nothing is priced yet. Price the
+        sample engagement, or post a dataset to /v1/billing/prepare.</td></tr>`;
+      return;
+    }
+    body.innerHTML = "";
+    for (const row of shown) {
+      const invoice = row.invoice;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><code>${invoice.id}</code><div class="muted" style="font-size:12px">
+          ${invoice.description || ""}</div></td>
+        <td>${invoice.client}</td>
+        <td class="num">${money(invoice.amount_cents, invoice.currency || currency)}</td>
+        <td><span class="pill ${row.state}">${row.state}</span>
+          <div class="muted" style="font-size:12px">${row.note || ""}</div></td>
+        <td>${row.order_id ? `<code>${row.order_id}</code>` : '<span class="muted">—</span>'}
+          ${row.captured_by ? `<div class="muted" style="font-size:12px">by ${row.captured_by}</div>` : ""}</td>
+        <td></td>`;
+      const actions = tr.lastElementChild;
+      if (row.state === "awaiting_buyer" || row.state === "unknown" || !row.order_id) {
+        actions.append(button("Open", () => act(() =>
+          api(`/v1/billing/invoices/${encodeURIComponent(invoice.id)}/open`, { method: "POST" }))));
+      }
+      if (row.state === "awaiting_capture" || row.state === "awaiting_buyer") {
+        actions.append(button("Capture", () => act(async () => {
+          const name = (state.identities ? "" : $("approved-by").value.trim());
+          if (!state.identities && !name) {
+            throw new Error("name the person who approved this payment first");
+          }
+          const body = name ? { approved_by: name } : {};
+          return api(`/v1/billing/invoices/${encodeURIComponent(invoice.id)}/capture`,
+                     { method: "POST", body: JSON.stringify(body) });
+        })));
+      }
+      actions.append(button("Ledger", async () => {
+        state.invoice = invoice.id;
+        $("events").textContent = JSON.stringify(
+          (await api(`/v1/billing/invoices/${encodeURIComponent(invoice.id)}/events`)).events,
+          null, 2);
+      }, "ghost small"));
+      body.append(tr);
+    }
+  }
+
+  function button(label, onClick, cls = "small") {
+    const element = document.createElement("button");
+    element.textContent = label;
+    element.className = cls;
+    element.addEventListener("click", onClick);
+    return element;
+  }
+
+  async function act(run) {
+    try {
+      const result = await run();
+      say(`${result.state} · ${result.note || "no note"}`);
+      await refresh();
+    } catch (error) {
+      say(String(error.message));
+    }
+  }
+
+  $("connect").addEventListener("click", async () => {
+    state.token = $("token").value.trim();
+    if (!state.token) { say("Enter the operator token that the service was started with."); return; }
+    try { await refresh(); } catch (error) { $("health").textContent = "refused";
+      $("health").className = "pill failed"; say(String(error.message)); }
+  });
+
+  $("price-sample").addEventListener("click", async () => {
+    if (!state.token) { say("Connect first: the token is what authorises the pricing."); return; }
+    try {
+      const result = await api("/v1/billing/prepare", {
+        method: "POST",
+        body: JSON.stringify({ dataset_id: "demo-2026", records: [SAMPLE] }),
+      });
+      for (const row of result.engagements) {
+        if (row.invoice && !state.priced.some((priced) => priced.id === row.invoice.id)) {
+          state.priced.push(row.invoice);
+        }
+      }
+      say(`${result.priced} priced, ${result.refused} refused. Open a priced invoice to create ` +
+          `its order, then capture it under a person's name.`);
+      await refresh();
+    } catch (error) {
+      say(String(error.message));
+    }
+  });
+
+  $("ask").addEventListener("click", async () => {
+    const question = $("question").value.trim();
+    if (!question) { return; }
+    const cleared = $("cleared").value.split(",").map((s) => s.trim()).filter(Boolean);
+    const name = $("approved-by").value.trim();
+    const body = { question, approved_invoices: cleared };
+    if (name) { body.approved_by = name; }
+    $("answer").textContent = "Thinking…";
+    try {
+      const result = await api("/v1/billing/ask", { method: "POST", body: JSON.stringify(body) });
+      $("answer").textContent = `${result.answer || "(no answer)"}\n\n` +
+        result.steps.map((step) =>
+          `${step.allowed ? "allowed " : "refused "} ${step.tool} ${JSON.stringify(step.arguments)}\n` +
+          `  ${JSON.stringify(step.result).slice(0, 600)}`).join("\n") +
+        (result.stopped ? `\n\nstopped: ${result.stopped}` : "");
+      await refresh();
+    } catch (error) {
+      $("answer").textContent = String(error.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>

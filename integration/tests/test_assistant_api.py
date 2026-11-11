@@ -1,6 +1,9 @@
 """The assistant at the HTTP edge: fail-closed without a key, a real tool loop with one."""
 from __future__ import annotations
 
+import threading
+import time
+
 from fastapi.testclient import TestClient
 from fake_gemini import answer, tool_calls
 
@@ -85,7 +88,8 @@ def test_capture_over_http_needs_the_named_approver(gemini, base_record):
         tool_calls(("billing_capture", {"invoice_id": INVOICE_ID})),
         answer("Captured.")])
     allowed = edge.post("/v1/billing/ask", headers=auth(),
-                        json={"question": "capture it", "approved_by": "H. Shaukat"})
+                        json={"question": "capture it", "approved_by": "H. Shaukat",
+                              "approved_invoices": [INVOICE_ID]})
     assert allowed.status_code == 200
     assert allowed.json()["steps"][0]["allowed"] is True
     assert provider.capture_calls == 1
@@ -119,3 +123,30 @@ def test_an_unreachable_database_is_503_not_a_silent_fall_back_to_memory():
     response = edge.get("/v1/billing/summary", headers=auth())
     assert response.status_code == 503
     assert "unreachable" in response.json()["detail"]
+
+
+def test_a_slow_model_does_not_hold_the_service_lock(gemini, base_record):
+    # A model turn can take thirty seconds. Holding the service lock across it would make every
+    # other request in the process wait behind one conversation's latency.
+    edge, _, _ = build(gemini)
+    prepare(edge, base_record)
+    started, release = threading.Event(), threading.Event()
+
+    def slow(_body: dict) -> dict:
+        started.set()
+        release.wait(timeout=8)
+        return answer("Done.")
+
+    gemini.replies.append(slow)
+    asked = threading.Thread(target=lambda: edge.post(
+        "/v1/billing/ask", headers=auth(), json={"question": "what is due?"}))
+    asked.start()
+    try:
+        assert started.wait(timeout=10), "the model was never called"
+        began = time.monotonic()
+        assert prepare(edge, base_record)["priced"] == 1
+        assert time.monotonic() - began < 3, "another request waited on the model"
+    finally:
+        release.set()
+        asked.join(timeout=20)
+    assert not asked.is_alive()

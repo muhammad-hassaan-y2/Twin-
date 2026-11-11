@@ -1,0 +1,73 @@
+name: integration
+
+on:
+  push:
+    branches: [main, integration]
+    paths:
+      - "integration/**"
+      - "tabletop-twin/backend/**"
+      - "swarm-oversight/swarm_oversight/**"
+      - ".github/workflows/integration.yml"
+  pull_request:
+    paths:
+      - "integration/**"
+      - "tabletop-twin/backend/**"
+      - "swarm-oversight/swarm_oversight/**"
+      - ".github/workflows/integration.yml"
+  workflow_dispatch: {}
+
+jobs:
+  # Everything that needs no database: the monitor, the firm's desks, the settlement hub
+  # over the real PayPal transport, the billing book, the assistant and the HTTP edge.
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # The local EVM sidecar is the same one the tests spawn; without its packages the
+      # chain test skips, and a skipped test proves nothing.
+      - run: npm ci --prefix tabletop-twin/chain
+      - run: pip install -e "integration[dev]"
+      - name: Offline suite
+        working-directory: integration
+        run: python -m pytest -q
+      - name: Showcase runs and prints measured figures
+        working-directory: integration
+        run: |
+          python -m oversight_twin.showcase | tee /tmp/showcase.txt
+          grep -q "without oversight: 950.00 settles; with it: 500.00" /tmp/showcase.txt
+
+  # The PostgreSQL half: a second store sees the first one's book, a captured entry keeps
+  # its approver, the database rejects a state the book does not define, and one
+  # engagement cannot hold two invoices.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: oversight
+          POSTGRES_USER: oversight
+          POSTGRES_PASSWORD: oversight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oversight -d oversight"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OVERSIGHT_TEST_DATABASE_URL: postgresql://oversight:oversight@localhost:5432/oversight
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e "integration[dev]"
+      - name: Store suite against a real server
+        working-directory: integration
+        run: python -m pytest -q tests/test_store.py -rs

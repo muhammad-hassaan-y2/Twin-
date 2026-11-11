@@ -149,11 +149,23 @@ class PayPalTransport:
         order_id = self._order_ids.get(idempotency_key)
         if not order_id:
             return ProviderResult(status="unknown", raw={"reason": "no known order ID for this key"})
+        return self.lookup_order(order_id)
+
+    def lookup_order(self, order_id: str) -> ProviderResult:
+        """Read an order by the provider id the caller stored, not by a key map.
+
+        This is the restart path: `_order_ids` lives in this process, the order lives at the
+        provider. A 404 is reported as unknown rather than absent, because a GET that fails
+        cannot establish that an earlier capture did not happen.
+        """
+        if not order_id:
+            return ProviderResult(status="unknown", raw={"reason": "no order id to read"})
         try:
             order = self._get(f"/v2/checkout/orders/{order_id}")
         except ProviderNotFound as exc:
             return ProviderResult(status="unknown", reference=order_id, raw={"reason": str(exc)})
-        return ProviderResult(status=self._map(order.get("status", "")), reference=order_id, raw=order)
+        return ProviderResult(status=self._map(order.get("status", "")), reference=order_id,
+                              raw=order)
 
     def _map(self, provider_status: str) -> str:
         return _STATUS_MAP.get(str(provider_status).upper(), "unknown")

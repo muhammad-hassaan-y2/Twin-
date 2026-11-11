@@ -12,8 +12,8 @@ import uuid
 
 import pytest
 
-from oversight_twin.commerce import BillingBook, Invoice, SimulatedMerchant
-from oversight_twin.store import MemoryStore, PostgresStore, store_from_env
+from oversight_twin.commerce import BillingBook, Invoice, InvoiceConflict, SimulatedMerchant
+from oversight_twin.store import MemoryStore, PostgresStore, StoreUnavailable, store_from_env
 from twin.payments.paypal import PayPalConfig, PayPalTransport
 
 INVOICE_ID = "crm-2026:A1:invoice"
@@ -104,10 +104,12 @@ def test_a_conflict_is_remembered_too():
     changed = Invoice(id=INVOICE_ID, engagement_id="crm-2026:A1", client="Acme GmbH",
                       amount_cents=99_000, description="Statutory audit - Acme GmbH")
     second = book(provider, store)
-    second.prepare(changed)
-    assert second.open_prepared(INVOICE_ID)["state"] == "conflict"
+    with pytest.raises(InvoiceConflict):
+        second.prepare(changed)
     assert book(provider, store).summary()["conflicts"] == 1
     assert provider.create_calls == 1
+    # The refusal leaves the terms that were priced intact: opening again bills 200.00, not 990.00.
+    assert book(provider, store).open_prepared(INVOICE_ID)["invoice"]["amount_cents"] == 20_000
 
 
 def test_a_new_export_replaces_the_datasets_engagements(base_record):
@@ -240,6 +242,48 @@ def test_postgres_engagements_come_back_for_the_assistant(base_record):
         replaced = BillingService(provider, merchant="Ashgrove Audit LLP", rail="simulated",
                                   store=PostgresStore(PG, schema=schema))
         assert [row["external_id"] for row in replaced.tool("billing_list", {})["result"]] == ["B2"]
+    finally:
+        _drop(schema)
+
+
+@needs_postgres
+def test_postgres_refuses_a_second_invoice_for_one_engagement():
+    # The code refuses it, but a database is the only place a second worker cannot be
+    # forgotten: the unique expression index on invoice->>'engagement_id' is that backstop.
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    try:
+        store = PostgresStore(PG, schema=schema)
+        first = {"id": "crm-2026:A1:invoice", "engagement_id": "crm-2026:A1", "client": "Acme",
+                 "amount_cents": 20_000, "currency": "USD", "due_in_days": 14}
+        store.save_invoice("Ashgrove Audit LLP", first)
+        with pytest.raises(StoreUnavailable):
+            store.save_invoice("Ashgrove Audit LLP",
+                               dict(first, id="crm-2026:A1:second", amount_cents=99_000))
+        assert len(store.load("Ashgrove Audit LLP").invoices) == 1
+    finally:
+        _drop(schema)
+
+
+@needs_postgres
+def test_postgres_keeps_the_ledger_and_the_capture_attribution():
+    schema = f"t_{uuid.uuid4().hex[:12]}"
+    provider = SimulatedMerchant()
+    try:
+        first = book(provider, PostgresStore(PG, schema=schema))
+        first.prepare(invoice())
+        first.open_prepared(INVOICE_ID, actor="H. Shaukat", request_id="r-1")
+        stale = book(provider, PostgresStore(PG, schema=schema))
+        stale.status(INVOICE_ID)
+        first.capture(INVOICE_ID, approved_by="H. Shaukat", actor="H. Shaukat")
+
+        again = stale.capture(INVOICE_ID, approved_by="Someone Else")
+        assert again["captured_by"] == "H. Shaukat"
+        assert provider.capture_calls == 1
+
+        events = PostgresStore(PG, schema=schema).events("Ashgrove Audit LLP", INVOICE_ID)
+        assert [event["kind"] for event in events] == [
+            "order_opened", "capture_attempted", "captured"]
+        assert events[0]["request_id"] == "r-1"
     finally:
         _drop(schema)
 

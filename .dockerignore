@@ -1,0 +1,26 @@
+# The image needs three source trees and nothing else. Keeping the context small keeps
+# builds quick and keeps local scratch files, journals and node_modules out of the image.
+.git
+.gitignore
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/*.egg-info
+**/build
+**/dist
+**/node_modules
+**/.venv
+**/venv
+
+# Not part of the served service.
+tabletop-twin/chain
+tabletop-twin/web
+swarm-oversight/data
+swarm-oversight/results
+swarm-oversight/report.pdf
+swarm-oversight/tests
+
+**/.env
+**/.env.*
+**/*.journal.jsonl
+**/artifacts

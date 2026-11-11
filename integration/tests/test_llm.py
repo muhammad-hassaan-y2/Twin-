@@ -116,10 +116,27 @@ def test_the_operators_approver_overrides_the_name_the_model_wrote(gemini, base_
         tool_calls(("billing_capture", {"invoice_id": INVOICE_ID, "approved_by": "Gemini"})),
         answer("Captured."),
     ])
-    result = Assistant(client_for(gemini), tools).ask("capture it", approved_by="H. Shaukat")
+    result = Assistant(client_for(gemini), tools,
+                       approved_invoices=[INVOICE_ID]).ask("capture it",
+                                                           approved_by="H. Shaukat")
     assert result["steps"][0]["allowed"] is True
     assert provider.capture_calls == 1
     assert book.status(INVOICE_ID)["captured_by"] == "H. Shaukat"
+
+
+def test_a_capture_outside_the_operators_list_is_refused(gemini, base_record):
+    # The failing-first control for the allowlist: same approver, same invoice, only the
+    # operator's clearance removed. Without the list check this call captures money.
+    provider, book, tools = ledger(base_record)
+    book.open_prepared(INVOICE_ID)
+    gemini.replies.extend([
+        tool_calls(("billing_capture", {"invoice_id": INVOICE_ID})),
+        answer("I was not cleared to capture that."),
+    ])
+    result = Assistant(client_for(gemini), tools).ask("capture it", approved_by="H. Shaukat")
+    assert result["steps"][0]["allowed"] is False
+    assert provider.capture_calls == 0
+    assert book.status(INVOICE_ID)["state"] == "awaiting_capture"
 
 
 def test_a_model_that_never_answers_is_stopped(gemini, base_record):

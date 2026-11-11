@@ -46,13 +46,23 @@ class StoreUnavailable(RuntimeError):
 
 class Store(Protocol):
     def load(self, merchant: str) -> BookSnapshot: ...
+    def load_entry(self, merchant: str, invoice_id: str) -> dict[str, Any] | None: ...
     def save_invoice(self, merchant: str, invoice: dict[str, Any]) -> None: ...
     def save_engagement(self, merchant: str, dataset_id: str, key: str,
                         entry: dict[str, Any]) -> None: ...
+    def replace_engagements(self, merchant: str, dataset_id: str,
+                            entries: dict[str, dict[str, Any]]) -> None: ...
     def clear_engagements(self, merchant: str, dataset_id: str) -> None: ...
     def save_entry(self, merchant: str, entry: dict[str, Any]) -> None: ...
+    def update_entry(self, merchant: str, entry: dict[str, Any],
+                     *, expected: tuple[str, ...]) -> bool: ...
     def save_conflict(self, merchant: str, entry: dict[str, Any]) -> None: ...
+    def append_event(self, merchant: str, event: dict[str, Any]) -> None: ...
+    def events(self, merchant: str, invoice_id: str | None = None) -> list[dict[str, Any]]: ...
     def describe(self) -> dict[str, Any]: ...
+
+
+_TERMINAL_STATES = ("captured", "failed")
 
 
 class MemoryStore:
@@ -63,6 +73,7 @@ class MemoryStore:
         self._entries: dict[str, dict[str, dict[str, Any]]] = {}
         self._conflicts: dict[str, dict[str, dict[str, Any]]] = {}
         self._engagements: dict[str, dict[tuple[str, str], dict[str, Any]]] = {}
+        self._events: dict[str, list[dict[str, Any]]] = {}
 
     def load(self, merchant: str) -> BookSnapshot:
         return BookSnapshot(
@@ -78,9 +89,21 @@ class MemoryStore:
     def save_invoice(self, merchant: str, invoice: dict[str, Any]) -> None:
         self._invoices.setdefault(merchant, {})[invoice["id"]] = copy.deepcopy(invoice)
 
+    def load_entry(self, merchant: str, invoice_id: str) -> dict[str, Any] | None:
+        stored = self._entries.get(merchant, {}).get(invoice_id)
+        return copy.deepcopy(stored) if stored is not None else None
+
     def save_engagement(self, merchant: str, dataset_id: str, key: str,
                         entry: dict[str, Any]) -> None:
         self._engagements.setdefault(merchant, {})[(dataset_id, key)] = copy.deepcopy(entry)
+
+    def replace_engagements(self, merchant: str, dataset_id: str,
+                            entries: dict[str, dict[str, Any]]) -> None:
+        stored = self._engagements.setdefault(merchant, {})
+        for key in [key for key in stored if key[0] == dataset_id]:
+            del stored[key]
+        for key, entry in entries.items():
+            stored[(dataset_id, key)] = copy.deepcopy(entry)
 
     def clear_engagements(self, merchant: str, dataset_id: str) -> None:
         stored = self._engagements.get(merchant, {})
@@ -88,10 +111,34 @@ class MemoryStore:
             del stored[key]
 
     def save_entry(self, merchant: str, entry: dict[str, Any]) -> None:
-        self._entries.setdefault(merchant, {})[entry["invoice"]["id"]] = copy.deepcopy(entry)
+        """Create or refresh a row, never downgrading one the provider has finished with."""
+        stored = self._entries.setdefault(merchant, {})
+        current = stored.get(entry["invoice"]["id"])
+        if current is not None and current["state"] in _TERMINAL_STATES:
+            return
+        stored[entry["invoice"]["id"]] = copy.deepcopy(entry)
+
+    def update_entry(self, merchant: str, entry: dict[str, Any],
+                     *, expected: tuple[str, ...]) -> bool:
+        stored = self._entries.setdefault(merchant, {})
+        current = stored.get(entry["invoice"]["id"])
+        if current is None or current["state"] not in expected:
+            return False
+        stored[entry["invoice"]["id"]] = copy.deepcopy(entry)
+        return True
 
     def save_conflict(self, merchant: str, entry: dict[str, Any]) -> None:
         self._conflicts.setdefault(merchant, {})[entry["invoice"]["id"]] = copy.deepcopy(entry)
+
+    def append_event(self, merchant: str, event: dict[str, Any]) -> None:
+        self._events.setdefault(merchant, []).append(copy.deepcopy(event))
+
+    def events(self, merchant: str, invoice_id: str | None = None) -> list[dict[str, Any]]:
+        rows = self._events.get(merchant, [])
+        if invoice_id is not None:
+            rows = [row for row in rows if row.get("invoice_id") == invoice_id]
+        return copy.deepcopy(sorted(rows, key=lambda row: (row.get("at", ""),
+                                                            row.get("event_id", ""))))
 
     def describe(self) -> dict[str, Any]:
         return {"kind": "memory", "durable": False}
@@ -173,6 +220,21 @@ class PostgresStore:
                             updated_at timestamptz NOT NULL DEFAULT now(),
                             PRIMARY KEY (merchant, dataset_id, engagement_key)
                         )"""))
+                    conn.execute(sql("""
+                        CREATE TABLE IF NOT EXISTS {schema}.book_events (
+                            merchant text NOT NULL,
+                            invoice_id text NOT NULL,
+                            event_id text NOT NULL,
+                            event jsonb NOT NULL,
+                            created_at timestamptz NOT NULL DEFAULT now(),
+                            PRIMARY KEY (merchant, invoice_id, event_id)
+                        )"""))
+                    # The book holds one order per engagement. Two invoices for one engagement
+                    # would be two charges for one piece of work, so the database refuses it even
+                    # if a future code path forgets to.
+                    conn.execute(sql("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS book_invoices_engagement
+                        ON {schema}.book_invoices (merchant, (invoice->>'engagement_id'))"""))
                     conn.commit()
                 except Exception as error:
                     try:
@@ -221,12 +283,63 @@ class PostgresStore:
         self._write("DELETE FROM {schema}.book_engagements "
                     "WHERE merchant = %s AND dataset_id = %s", (merchant, dataset_id))
 
+    def replace_engagements(self, merchant: str, dataset_id: str,
+                            entries: dict[str, dict[str, Any]]) -> None:
+        """Replace one dataset's engagements in one transaction: never half of a new export."""
+        self.ensure()
+        with self._connection(autocommit=False) as conn:
+            try:
+                conn.execute(self._sql()("DELETE FROM {schema}.book_engagements "
+                                         "WHERE merchant = %s AND dataset_id = %s"),
+                             (merchant, dataset_id))
+                for key, entry in entries.items():
+                    conn.execute(
+                        self._sql()(
+                            "INSERT INTO {schema}.book_engagements "
+                            "(merchant, dataset_id, engagement_key, entry) VALUES (%s, %s, %s, %s) "
+                            "ON CONFLICT (merchant, dataset_id, engagement_key) DO UPDATE "
+                            "SET entry = EXCLUDED.entry, updated_at = now()"),
+                        (merchant, dataset_id, key, _json(entry)))
+                conn.commit()
+            except Exception as error:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                _reraise(error)
+
+    def load_entry(self, merchant: str, invoice_id: str) -> dict[str, Any] | None:
+        rows = self._query("SELECT entry FROM {schema}.book_entries "
+                           "WHERE merchant = %s AND invoice_id = %s", (merchant, invoice_id))
+        return rows[0][0] if rows else None
+
     def save_entry(self, merchant: str, entry: dict[str, Any]) -> None:
+        """Create or refresh a row, never downgrading one the provider has finished with.
+
+        The guard is the WHERE on the conflict update: a captured or failed row keeps its state
+        and its approver, whatever a stale worker believes it saw.
+        """
         self._write(
-            "INSERT INTO {schema}.book_entries (merchant, invoice_id, state, entry) "
+            "INSERT INTO {schema}.book_entries AS e (merchant, invoice_id, state, entry) "
             "VALUES (%s, %s, %s, %s) ON CONFLICT (merchant, invoice_id) DO UPDATE "
-            "SET state = EXCLUDED.state, entry = EXCLUDED.entry, updated_at = now()",
+            "SET state = EXCLUDED.state, entry = EXCLUDED.entry, updated_at = now() "
+            "WHERE e.state NOT IN ('captured', 'failed')",
             (merchant, entry["invoice"]["id"], entry["state"], _json(entry)))
+
+    def update_entry(self, merchant: str, entry: dict[str, Any],
+                     *, expected: tuple[str, ...]) -> bool:
+        """Move one row only if it still holds the state the caller read. False means it moved."""
+        self.ensure()
+        statement = self._sql()(
+            "UPDATE {schema}.book_entries SET state = %s, entry = %s, updated_at = now() "
+            "WHERE merchant = %s AND invoice_id = %s AND state = ANY(%s)")
+        with self._connection() as conn:
+            try:
+                cursor = conn.execute(statement, (entry["state"], _json(entry), merchant,
+                                                 entry["invoice"]["id"], list(expected)))
+                return cursor.rowcount == 1
+            except Exception as error:
+                _reraise(error)
 
     def save_conflict(self, merchant: str, entry: dict[str, Any]) -> None:
         self._write(
@@ -234,6 +347,23 @@ class PostgresStore:
             "VALUES (%s, %s, %s) ON CONFLICT (merchant, invoice_id) DO UPDATE "
             "SET entry = EXCLUDED.entry, updated_at = now()",
             (merchant, entry["invoice"]["id"], _json(entry)))
+
+    def append_event(self, merchant: str, event: dict[str, Any]) -> None:
+        """Append one fact to the ledger. An event is never updated or deleted."""
+        self._write(
+            "INSERT INTO {schema}.book_events (merchant, invoice_id, event_id, event) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (merchant, invoice_id, event_id) DO NOTHING",
+            (merchant, event["invoice_id"], event["event_id"], _json(event)))
+
+    def events(self, merchant: str, invoice_id: str | None = None) -> list[dict[str, Any]]:
+        if invoice_id is None:
+            rows = self._query("SELECT event FROM {schema}.book_events WHERE merchant = %s "
+                               "ORDER BY created_at, event_id", (merchant,))
+        else:
+            rows = self._query("SELECT event FROM {schema}.book_events "
+                               "WHERE merchant = %s AND invoice_id = %s "
+                               "ORDER BY created_at, event_id", (merchant, invoice_id))
+        return [row[0] for row in rows]
 
     def describe(self) -> dict[str, Any]:
         return {"kind": "postgres", "durable": True, "schema": self.schema}

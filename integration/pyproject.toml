@@ -4,17 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oversight-twin"
-version = "0.1.0"
+version = "0.3.0"
 description = "swarm-oversight's principal-wide monitor at tabletop-twin's PayPal/rail settlement seam"
+readme = "README.md"
 requires-python = ">=3.11"
+# The package is imported from a checkout: oversight_twin/__init__ puts the sibling
+# baselines on sys.path, so the wheel is not standalone and these are what a full
+# checkout needs, not an install of this project alone.
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.30",
+  "psycopg[binary]>=3.1",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "fastapi>=0.110", "httpx>=0.27"]
-api = ["fastapi>=0.110", "uvicorn>=0.30"]
-postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+oversight-twin = "oversight_twin.showcase:main"
 
 [tool.setuptools.packages.find]
 include = ["oversight_twin*"]
+
+[tool.setuptools.package-data]
+oversight_twin = ["demo.html"]
 
 # Importing oversight_twin puts both baselines on sys.path (see its __init__), so
 # the integration tests need no installation of the two sibling projects. The
