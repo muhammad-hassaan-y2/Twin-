@@ -23,6 +23,7 @@ from os import getenv
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Body, status, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -42,6 +43,14 @@ app = FastAPI(
     title="Oversight Twin — PayPal AI Agent Settlement Hub",
     version="1.0.0",
     description="PayPal-centered financial settlement hub and AI safety guard for autonomous agent swarms.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
