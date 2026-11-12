@@ -373,7 +373,14 @@ class BillingBook:
         if not entry.get("order_id"):
             raise ValueError("this invoice has no order yet; open it before capturing")
 
-        read = self._lookup(entry)
+        try:
+            read = self._lookup(entry)
+        except MoneyNotMoved as error:
+            # The read itself was refused (a rejected credential, say). Nothing moved and
+            # nothing is known; leave the invoice as it is so a later capture can proceed.
+            return self._advance(entry, entry["state"], actor=actor, request_id=request_id,
+                                 event="capture_unknown",
+                                 note=f"the provider refused the status read: {error}")
         provider = str((read.raw or {}).get("status", "")).upper()
         if provider == "COMPLETED":
             return self._finish(entry, CAPTURED, read.reference or entry["order_id"], approved_by,
