@@ -12,12 +12,14 @@ Responsibilities
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Tuple, Any
-
+import os
 import sys
 from pathlib import Path
-_SWARM_DIR = Path(__file__).resolve().parent.parent / 'swarm-oversight'
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+
+# Ensure swarm-oversight directory is in sys.path
+_SWARM_DIR = Path(__file__).resolve().parent.parent / "swarm-oversight"
 if _SWARM_DIR.is_dir() and str(_SWARM_DIR) not in sys.path:
     sys.path.insert(0, str(_SWARM_DIR))
 
@@ -42,14 +44,14 @@ class Action:
 class PaymentState:
     """Runtime state of a charge attempt."""
 
-    state: str  # "PENDING", "COMPLETED", "FAILED", "UNKNOWN"
+    state: str  # "PENDING", "COMPLETED", "FAILED", "UNKNOWN", "AWAITING_HUMAN"
     reason: str | None = None
     paypal_order_id: str | None = None
     paypal_order_json: dict | None = None
 
 
 class Session:
-    """Simple action-log session used by the oversight_twin guard.
+    """Action-log session used by the oversight_twin guard.
 
     * ``observe(action)`` appends the action and runs ``Monitor.review()``.
     * If the monitor flags a cap breach the state will be ``FAILED``;
@@ -59,17 +61,40 @@ class Session:
     """
 
     def __init__(self, monitor: Monitor | None = None, limits: Limits | None = None) -> None:
-        self.monitor = monitor or Monitor(limits or Limits())
+        self.limits = limits or Limits()
+        self.monitor = monitor or Monitor(self.limits)
         self._log: List[BaseAction] = []
         self._latest_state: PaymentState = PaymentState(state="PENDING")
+        self.successful_spend_cents: int = 0
+        self.blocked_attempts: List[Dict[str, Any]] = []
+        self.active_mandates: Dict[str, int] = {}
+        self.cleared_agreements: Set[str] = set()
+        self.transactions: List[Dict[str, Any]] = []
 
-    def observe(self, action: Action) -> PaymentState:
-        """Record *action* and recompute the latest ``PaymentState``.
+    def observe(self, action: Action, mandate_cap_cents: int | None = None) -> PaymentState:
+        """Record *action* and recompute the latest ``PaymentState``."""
+        if mandate_cap_cents is not None:
+            self.active_mandates[action.agent] = mandate_cap_cents
+        elif action.agent not in self.active_mandates:
+            self.active_mandates[action.agent] = self.limits.per_agent
 
-        Returns the updated state.  If the monitor detects a cap breach the
-        returned state will be ``FAILED``; the FastAPI endpoint must then
-        raise ``MoneyNotMoved`` so that no PayPal HTTP call is made.
-        """
+        # Check explicit mandate cap first
+        effective_cap = mandate_cap_cents if mandate_cap_cents is not None else self.limits.per_agent
+        if action.amount > effective_cap:
+            self._latest_state = PaymentState(
+                state="FAILED",
+                reason=f"{action.agent} spent {action.amount} > {effective_cap}",
+            )
+            self.blocked_attempts.append({
+                "seq": action.seq,
+                "agent": action.agent,
+                "amount": action.amount,
+                "payee": action.payee,
+                "reason": self._latest_state.reason,
+                "tick": action.tick,
+            })
+            return self._latest_state
+
         base = BaseAction(
             seq=action.seq,
             agent=action.agent,
@@ -81,44 +106,51 @@ class Session:
         self._log.append(base)
         flags = self.monitor.review(self._log)
         state, reason = self._derive_state_from_flags(flags)
+        
+        if state == "FAILED":
+            self.blocked_attempts.append({
+                "seq": action.seq,
+                "agent": action.agent,
+                "amount": action.amount,
+                "payee": action.payee,
+                "reason": reason,
+                "tick": action.tick,
+            })
+            
         self._latest_state = PaymentState(state=state, reason=reason)
         return self._latest_state
 
     @staticmethod
     def _derive_state_from_flags(flags: list) -> tuple[str, str | None]:
-        """Map monitor flags to a ``PaymentState``.
-
-        The monitor returns ``(index, flag)`` pairs collapsed into
-        ``(state, reason)``.
-        """
+        """Map monitor flags to a ``PaymentState``."""
         if not flags:
             return "PENDING", None
 
-        # Any over_limit, relay, or split flag means the cap was breached
-        # locally — do not call PayPal.
         for _idx, flag in flags:
             rule = flag.rule
             if "over_limit" in rule or "relay" in rule or "split" in rule:
                 return "FAILED", flag.reason or "Spending cap breached"
-        # Unknown flags still block the payment.
         return "FAILED", "; ".join(flag.reason for _idx, flag in flags)
 
-    def record_spend(self) -> None:
-        """Explicitly record a successful spend so the log stays consistent
-        when the FastAPI endpoint decides to route the charge to PayPal.
-        """
-        # The log is already consistent because the caller only reaches here
-        # after the guard passed (FAILED was not returned).  We just update
-        # the latest state to COMPLETED.
+    def record_spend(self, amount_cents: int = 0, tx_meta: dict | None = None) -> None:
+        """Explicitly record a successful spend so metrics and log stay consistent."""
+        if amount_cents > 0:
+            self.successful_spend_cents += amount_cents
+        if tx_meta:
+            self.transactions.append(tx_meta)
         self._latest_state = PaymentState(state="COMPLETED", reason=None)
+
+    def clear_agreement(self, agreement_id: str) -> None:
+        """Record human clearance for an agreement or payout above threshold."""
+        self.cleared_agreements.add(agreement_id)
+
+    def is_cleared(self, agreement_id: str) -> bool:
+        return agreement_id in self.cleared_agreements
 
 
 class MoneyNotMoved(Exception):
     """Raised by the FastAPI handler when the oversight guard detected a
-    spending-cap breach.  The handler should return HTTP 402 and set the
-    charge state to ``FAILED`` without touching the PayPal API.
-
-    Always store ``reason`` as an attribute for API handlers and tests.
+    spending-cap breach.
     """
 
     def __init__(self, reason: str) -> None:
