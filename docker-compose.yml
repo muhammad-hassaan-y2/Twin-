@@ -1,0 +1,49 @@
+# Docker Compose for the PayPal AI Hackathon submission:
+# - FastAPI app (oversight_twin + PayPal client)
+# - Uses environment variables for PayPal credentials (required for sandbox calls)
+# - Exposes the two HTTP endpoints documented in the project.
+
+version: "3.8"
+
+services:
+  # The FastAPI service running the oversight twin and PayPal integration
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oversight_twin_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID}
+      - PAYPAL_SECRET=${PAYPAL_SECRET}
+    depends_on:
+      - dummy-paypal-mock  # placeholder; real sandbox calls go out to PayPal
+
+  # Optional: a dummy PayPal mock for local development without real credentials.
+  # If neither PAYPAL_CLIENT_ID nor PAYPAL_SECRET are set the app will return
+  # 500/UNKNOWN so the guard path can be tested independently.
+  dummy-paypal-mock:
+    image: curlimages/curl:8.5
+    container_name: dummy-paypal-mock
+    command: >
+      /bin/sh -c "
+      while ! curl -s -o /dev/null -w '%{http_code}' http://localhost:10000/health;
+      do echo 'waiting for mock...'; sleep 1;
+      done
+      echo 'PayPal mock is up'
+      "
+    ports:
+      - "10000:8000"
+
+# Useful one-liner to build & start:
+#   docker-compose up --build api
+#
+# To test the guard path (no credentials needed):
+#   PAYPAL_CLIENT_ID= PAYPAL_SECRET= docker-compose up --build api
+#
+# To test the PayPal-integration path set real sandbox credentials as env vars
+#   export PAYPAL_CLIENT_ID="..."
+#   export PAYPAL_SECRET="..."
+#   docker-compose up --build api
